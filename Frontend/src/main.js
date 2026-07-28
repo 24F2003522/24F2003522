@@ -1,5 +1,31 @@
 import { createApp } from 'vue'
-import './style.css'
+import { createRouter, createWebHistory } from 'vue-router'
 import App from './App.vue'
+import Register from './view/RegisterPage.vue'
+import Login from './view/LoginPage.vue'
+import Home from './view/HomePage.vue'
+import Admin from './view/AdminDashboard.vue'
+import Staff from './view/StaffDashboard.vue'
+import Trekker from './view/TrekkersDashboard.vue'
 
-createApp(App).mount('#app')
+const routes = [
+    { path: '/', component: Home },
+    { path: '/register', component: Register },
+    { path: '/login', component: Login },
+    { path: '/home', component: Home },
+    { path: '/admin', component: Admin },
+    { path: '/staff', component: Staff },
+    { path: '/trekkers', component: Trekker },
+    { path: '/:pathMatch(.*)*', redirect: '/home' }
+]
+
+const router = createRouter({
+    history: createWebHistory(),
+    routes
+})
+
+const app = createApp(App)
+app.use(router)
+app.mount('#app')
+
+export default router
