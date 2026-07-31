@@ -7,6 +7,9 @@ import Home from './view/HomePage.vue'
 import Admin from './view/AdminDashboard.vue'
 import Staff from './view/StaffDashboard.vue'
 import Trekker from './view/TrekkersDashboard.vue'
+import AssignStaff from './view/AssignStaff.vue'
+import Bookings from './view/Bookings.vue'
+
 
 const routes = [
     { path: '/', component: Home },
@@ -16,7 +19,10 @@ const routes = [
     { path: '/admin', component: Admin },
     { path: '/staff', component: Staff },
     { path: '/trekkers', component: Trekker },
-    { path: '/:pathMatch(.*)*', redirect: '/home' }
+    {path: '/assign-staff', component: AssignStaff},
+    {path: '/bookings', component: Bookings},
+   
+    { path: '/:pathMatch(.*)*', redirect: '/home' },
 ]
 
 const router = createRouter({

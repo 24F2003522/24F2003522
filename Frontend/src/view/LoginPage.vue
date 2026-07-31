@@ -38,10 +38,10 @@ export default {
                 this.message = response?.data?.message || 'Login successful'
                 localStorage.setItem('token', response?.data?.token)
                 if (response?.data?.role === 'admin') {
-                    this.$router.push('/admin')
-                } else if (response?.data?.role === 'staff') {
+                    this.$router.push('/admin') // vue page not python 
+                } else if (response?.data?.role === 'staff' && response?.data?.status === 'active') {
                     this.$router.push('/staff')
-                } else if (response?.data?.role === 'user') {
+                } else if (response?.data?.role === 'user' && response?.data?.status === 'active') {
                     this.$router.push('/trekkers')
                 }
             } catch (error) {
@@ -51,3 +51,6 @@ export default {
     }
 }
 </script>
+
+<style>
+</style>
