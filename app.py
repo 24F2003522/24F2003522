@@ -288,6 +288,7 @@ def search():
     }
 
     return jsonify(search_results), 200
+
 @app.route('/assignStaff/<int:trek_id>/<int:staff_id>', methods=['PUT'])
 @jwt_required()
 def assignStaff(trek_id, staff_id):
@@ -305,13 +306,79 @@ def assignStaff(trek_id, staff_id):
     db.session.commit()
     return jsonify({"message": f"Staff {staff.name} assigned to trek {trek.name}"}), 200
 
-
 @app.route('/allStaff', methods=['GET'])
 @jwt_required()
 def allStaff():
     staff = User.query.filter_by(role="staff").all()
     staff_list = [{"id": s.id, "name": s.name, "email": s.email, "contact": s.contact} for s in staff]
     return jsonify(staff_list), 200
+
+
+@app.route('/staffDashboard', methods=['GET'])
+@jwt_required()
+def staffDashboard():
+    staff_id = get_jwt_identity()
+    staff = User.query.get(staff_id)
+    if staff.role != 'staff':
+        return jsonify({"message": "You are not staff"}), 403
+
+    treks = Trek.query.filter_by(staff_id=staff.id).all()
+    trek_list = []
+    for t in treks:
+        trek_list.append({
+            "id": t.id,
+            "name": t.name,
+            "location": t.location,
+            "slots": t.slots,
+            "status": t.status,
+            "registered_count": Booking.query.filter_by(trek_id=t.id).count()
+        })
+    return jsonify(trek_list), 200
+
+@app.route('/staff/updateTrek/<int:trek_id>', methods=['PUT'])
+@jwt_required()
+def staffUpdateTrek(trek_id):
+    staff_id = get_jwt_identity()
+    trek = Trek.query.get(trek_id)
+    print("staff_id:", staff_id, "trek.staff_id:", trek.staff_id)
+    if trek.staff_id is None:
+        print("trek.staff_id is not None")
+        return jsonify({"message": "Not authorized"}), 403
+
+    data = request.get_json()
+    trek.slots = data.get("slots", trek.slots)
+    trek.status = data.get("status", trek.status)
+    db.session.commit()
+    return jsonify({"message": "Trek updated"}), 200
+
+@app.route('/participants/<int:trek_id>', methods=['GET'])
+@jwt_required()
+def staffParticipants(trek_id):
+    staff_id = get_jwt_identity()
+    trek = Trek.query.get(trek_id)
+    print("staff_id:", type(staff_id), "trek.staff_id:", trek.staff_id)
+    if not trek or int(trek.staff_id) != int(staff_id):
+        print("Not authorized: trek.staff_id:", trek.staff_id, "staff_id:", staff_id)
+        return jsonify({"message": "Not authorized"}), 403
+
+
+    participants = []
+    bookings = Booking.query.filter_by(trek_id=trek.id).all()
+    
+
+    for b in bookings:
+        user = User.query.get(b.user_id)
+        participants.append({
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "status": b.status
+        })
+    
+    return jsonify(participants), 200
+
+
+
 
 
 

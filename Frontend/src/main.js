@@ -9,6 +9,8 @@ import Staff from './view/StaffDashboard.vue'
 import Trekker from './view/TrekkersDashboard.vue'
 import AssignStaff from './view/AssignStaff.vue'
 import Bookings from './view/Bookings.vue'
+import Participants from './view/Participants.vue'
+
 
 
 const routes = [
@@ -21,7 +23,9 @@ const routes = [
     { path: '/trekkers', component: Trekker },
     {path: '/assign-staff', component: AssignStaff},
     {path: '/bookings', component: Bookings},
-   
+    {path: '/participants/:trekId', component: Participants, props: true},
+    
+
     { path: '/:pathMatch(.*)*', redirect: '/home' },
 ]
 
