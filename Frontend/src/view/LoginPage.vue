@@ -44,6 +44,9 @@ export default {
                 } else if (response?.data?.role === 'user' && response?.data?.status === 'active') {
                     this.$router.push('/trekkers')
                 }
+                else {
+                    this.message = 'Your account is inactive. Please contact the administrator.'
+                }
             } catch (error) {
                 this.message = error?.response?.data?.message || 'Login failed'
             }

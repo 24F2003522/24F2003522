@@ -31,6 +31,19 @@
             <input v-model="newTrek.name" placeholder="Trek Name" required />
             <input v-model="newTrek.location" placeholder="Location" required />
             <input v-model="newTrek.slots" type="number" placeholder="Slots" required />
+
+            <select v-model="newTrek.status">
+                <option>open</option>
+                <option>closed</option>
+                <option>started</option>
+                <option>ongoing</option>
+                <option>completed</option>
+            </select>
+            <select v-model="newTrek.difficulty">
+                <option>easy</option>
+                <option>medium</option>
+                <option>hard</option>
+            </select>
             <button type="submit">Add Trek</button>
         </form>
         <h3>Manage Trek</h3>
@@ -38,10 +51,23 @@
             <!-- <p>{{ trek.name }} - {{ trek.location }} - Slots: {{ trek.slots }}</p>
             <button @click="deleteTrek(trek.id)">Delete</button>
             <button @click="editTrek(trek.id)">Edit</button> -->
+            
             <input v-model="trek.name" placeholder={{ trek.name }} />
             <input v-model="trek.location" placeholder={{ trek.location }} />
             <input v-model.number="trek.slots" type="number" placeholder={{ trek.slots }} />
-
+            
+            <select v-model="trek.status" >
+                <option value="open">Open</option>
+                <option value="closed">Closed</option>
+                <option value="started">Started</option>
+                <option value="ongoing">Ongoing</option>
+                <option value="completed">Completed</option>
+            </select>
+            <select v-model="trek.difficulty">
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+            </select>
             <button @click="deleteTrek(trek.id)">Delete</button>
             <button @click="editTrek(trek)">Save Changes</button>
         </div>
@@ -57,15 +83,18 @@
 
             <input v-model="user.name" placeholder={{ user.name }} />
             <input v-model="user.email" placeholder={{ user.email }} />
-            <input v-model="user.status" placeholder={{ user.status }} />
+            <select v-model="user.status">
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                </select>
 
             <button @click="deleteUser(user.id)">Delete</button>
             <button @click="editUser(user)">Save Changes</button>
         </div>
         <router-link to="/assign-staff">Assign Staff</router-link>
         <div><router-link to="/bookings">Bookings</router-link></div>
-        
-        
+
+
 
     </div>
 </template>
@@ -76,7 +105,7 @@ export default {
     data() {
         return {
             stats: { treks: 0, users: 0, staff: 0, bookings: 0 },
-            newTrek: { name: '', location: '', slots: 0 },
+            newTrek: {},
             newStaff: { name: '', email: '', password: '' },
             message: '',
             trek: [], user: [],
@@ -132,7 +161,7 @@ export default {
             await axios.put(`http://127.0.0.1:5000/updateTrek/${trek.id}`, {
                 name: trek.name,
                 location: trek.location,
-                slots: trek.slots
+                slots: trek.slots,status: trek.status,difficulty: trek.difficulty
             }, {
                 headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
             })
@@ -145,14 +174,23 @@ export default {
             alert("Staff added!")
         },
         async editUser(user) {
+            alert("Editing user with ID: " + user.id)
             await axios.put(`http://127.0.0.1:5000/updateUser/${user.id}`, {
                 name: user.name,
                 email: user.email,
-                status: user.status
+                status: user.status,
+                
             }, {
                 headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
             })
             alert("User updated!")
+        },
+        async deleteUser(id) {
+            await axios.delete(`http://127.0.0.1:5000/deleteUser/${id}`, {
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            })
+                alert("User deleted!")
+            this.user = this.user.filter(u => u.id !== id)
         },
         async searchData() {
             const token = localStorage.getItem('token')

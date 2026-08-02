@@ -44,6 +44,8 @@ class Booking(db.Model):
     trek_id = db.Column(db.Integer, db.ForeignKey('trek.id'))
     booking_date = db.Column(db.String(20))
     status = db.Column(db.String(20), default="booked") 
+    user = db.relationship('User', backref='bookings')
+    trek = db.relationship('Trek', backref='bookings')
 
 class StaffProfile(db.Model):
     name = db.Column(db.String(100))
@@ -128,7 +130,7 @@ def creatTrek():
         return jsonify({"message": " You are not admin"}), 403
     data=request.get_json(silent=True) or {}
     trek=Trek(name=data['name'],location=data['location'],
-              slots=data['slots'],
+              slots=data['slots'],status=data.get('status', 'open'),difficulty=data.get('difficulty', 'easy')
               )
     db.session.add(trek)
     db.session.commit()
@@ -140,13 +142,16 @@ def allTrek():
     print("allTrek")
     user_id=get_jwt_identity()
     user=User.query.get(user_id)
-    if user.role !="admin":
-        return jsonify({"message": " You are not admin"}), 403
+    if user.role !="admin" :
+        print("inside alltrek")
+        return jsonify({"message": " You are not admin or staff"}), 403
     trek=Trek.query.all()
     trek_list=[]
+    print("outside allTrek")
     for trek in trek:
         trek_list.append({"id":trek.id, "location":trek.location, 
-                          "name":trek.name, "slots":trek.slots ,"staff_id": trek.staff_id,
+                          "name":trek.name, "slots":trek.slots ,
+                          "staff_id": trek.staff_id,"status": trek.status,"difficulty": trek.difficulty,
             "staff_name": trek.staff.name if trek.staff else None })
     return jsonify(trek_list),200    
 
@@ -197,6 +202,8 @@ def updateTrek(trek_id):
     trek.name=data.get('name',trek.name) #If name does not exist in data obj., use trek.name (the current value in the database).
     trek.location=data.get('location',trek.location)
     trek.slots=data.get('slots',trek.slots)
+    trek.status=data.get('status',trek.status)
+    trek.difficulty=data.get('difficulty',trek.difficulty)
     db.session.commit()
     return jsonify({"message":"Trek updated successfully"}),200
 
@@ -235,8 +242,9 @@ def allUsers():
 @app.route('/updateUser/<int:user_id>',methods=['PUT'])
 @jwt_required()
 def updateUser(user_id):
-    user_id = get_jwt_identity()
-    user=User.query.get(user_id)
+    print("updateUser called")
+    admin_id = get_jwt_identity()
+    user=User.query.get(admin_id)
     if user.role != 'admin':
         print("Failed to access admin dashboard")
         return jsonify({"message": " You are not admin"}), 403
@@ -244,6 +252,7 @@ def updateUser(user_id):
     user = User.query.get(user_id)
     if not user:
         return jsonify({"message": "User not found"}), 404
+    print("Updating user:", user_id, "with data:", data)
     user.name = data.get('name', user.name)
     user.email = data.get('email', user.email)
     user.status = data.get('status', user.status)
@@ -378,6 +387,136 @@ def staffParticipants(trek_id):
     return jsonify(participants), 200
 
 
+@app.route("/user/allTreks", methods=["GET"])
+@jwt_required()
+def all_Trek():
+    
+    print("allTrek")
+    user_id=get_jwt_identity()
+    user=User.query.get(user_id)
+    if user.role !="user" :
+        print("inside alltrek")
+        return jsonify({"message": " You are not admin or staff"}), 403
+    print("outside allTrek")
+    trek_list=[]
+    trek=Trek.query.all()
+    print("Fetched treks:", trek)
+    query=request.args.get('q')
+    difficulty=request.args.get('difficulty')
+    print("query:", query, difficulty)
+    # if query or difficulty:                    #fail when any of input is empty
+    #     print("Filtering treks based on query and difficulty")
+    #     trek = Trek.query.filter(Trek.name.contains(query) | Trek.location.contains(query) |
+    #                                Trek.difficulty.contains(difficulty)).all()
+    #     print("Filtered treks:", trek)
+    
+    if query:
+        trek = [t for t in trek if query.lower() in t.name.lower() or query.lower() in t.location.lower()]
+    if difficulty:
+        trek = [t for t in trek if difficulty.lower() in t.difficulty.lower()]
+   
+    for trek in trek:
+        book=Booking.query.filter_by(user_id=user_id,status="booked",trek_id=trek.id)
+        if book:
+            pass
+        
+        
+        print(trek)
+       # print("Appending trek:", trek.id, trek.name)
+       
+        trek_list.append({"id":trek.id, "location":trek.location, 
+                          "name":trek.name, "slots":trek.slots ,
+                          "staff_id": trek.staff_id,"status": trek.status,"difficulty": trek.difficulty,
+        "staff_name": trek.staff.name if trek.staff else None })
+      
+    return jsonify(trek_list),200  
+
+
+@app.route('/user/book/<int:trek_id>', methods=['POST'])
+@jwt_required()
+def book_trek(trek_id):
+    userId = get_jwt_identity()
+    trek = Trek.query.get(trek_id)
+
+    if not trek:
+        return jsonify({"message": "Trek not found"}), 404
+
+    if trek.status != "open" or trek.slots <= 0:
+        return jsonify({"message": "Booking not allowed"}), 403
+
+    existing = Booking.query.filter_by(user_id=userId, trek_id=trek_id,status="booked").first()
+    if existing:
+        return jsonify({"message": "Already booked"}), 400
+
+    new_booking = Booking(user_id=userId, trek_id=trek_id, status="booked")
+    trek.slots -= 1
+    db.session.add(new_booking)
+    db.session.commit()
+    print("Booking successful for user:", userId, "on trek:", trek_id)
+
+    return jsonify({"message": "Booking successful"}), 200
+
+@app.route('/user/bookings', methods=['GET'])
+@jwt_required()
+def user_bookings():
+    user_id = get_jwt_identity()
+    bookings = Booking.query.filter_by(user_id=user_id).all()
+    booking_list = []
+    print("Fetched bookings for user:", user_id, "Bookings:", bookings)
+    for b in bookings:
+        trek = Trek.query.get(b.trek_id)
+        if b.status=="booked":
+            booking_list.append({
+                        "id": b.id,
+                        "trek_name": trek.name ,
+                        "location": trek.location ,
+                        "status": b.status,"treakingStatus": trek.status
+                    })
+        
+    return jsonify(booking_list), 200
+
+@app.route('/user/history', methods=['GET'])
+@jwt_required()
+def user_history():
+    user_id= get_jwt_identity()
+    user=User.query.get(user_id)
+    if user.role!="user":
+        return jsonify({"message": "You are not a user"}), 403
+    history=Booking.query.filter_by(user_id=user_id).all()
+    history_list=[]
+    for h in history:
+        trek=Trek.query.get(h.trek_id)
+        if h.status=="cancel" or trek.status=="completed":
+            history_list.append({
+                        "id":h.id,
+                        "trek_name": trek.name,
+                        "location": trek.location,
+                        "status": h.status,"treakingStatus": trek.status
+            
+                    })
+        
+    print(trek.status)    
+    return jsonify(history_list), 200
+
+@app.route('/user/cancel/<int:book_id>', methods=['POST'])
+@jwt_required()
+def cancel(book_id):
+    print("hi",book_id)
+    user_id = get_jwt_identity()
+    user=User.query.get(user_id)
+    if user.role!="user":
+        return jsonify({"message":"Invalid Individual"})
+    booking = Booking.query.get(book_id)
+    trekId=booking.trek_id
+    booking.status="cancel"
+    trek=Trek.query.get(trekId)
+    trek.slots +=1
+    db.session.commit()
+
+    
+
+    
+    return jsonify({"message": "Booking successful"}), 200
 
 
 
