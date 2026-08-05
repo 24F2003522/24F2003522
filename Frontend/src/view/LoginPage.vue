@@ -1,22 +1,25 @@
 <template>
-    <div class="login">
-        <h2>Login</h2>
+    <div class="start">
+        <h1>Login</h1>
         <form @submit.prevent="login">
-            <div>
-                <label for="email">Email:</label>
-                <input type="email" v-model="email" required />
-            </div>
-            <div>
-                <label for="password">Password:</label>
-                <input type="password" v-model="password" required />
-            </div>
+<div>
+            <label for="email">Email:</label>
+            <input type="email" v-model="email" required />
+</div>
+<div>
+            <label for="password">Password:</label>
+            <input type="password" v-model="password" required />
+  </div>
+  
             <button type="submit">Login</button>
-        </form>
-        <p>{{ message }}</p>
+         </form>
+    <p>{{ message }}</p>
+    <router-link to="/register">Don't have an account? Register here</router-link>
     </div>
 </template>
 <script>
 import axios from 'axios'
+import router from '../main';
 
 export default {
     name: 'Login',
@@ -38,11 +41,14 @@ export default {
                 this.message = response?.data?.message || 'Login successful'
                 localStorage.setItem('token', response?.data?.token)
                 if (response?.data?.role === 'admin') {
+                    alert("Welcome Admin")
                     this.$router.push('/admin') // vue page not python 
                 } else if (response?.data?.role === 'staff' && response?.data?.status === 'active') {
-                    this.$router.push('/staff')
+                 this.$router.push('/staff')
+                    alert("Welcome "+response?.data.name)
                 } else if (response?.data?.role === 'user' && response?.data?.status === 'active') {
                     this.$router.push('/trekkers')
+                    alert("Welcome "+response?.data.name)
                 }
                 else {
                     this.message = 'Your account is inactive. Please contact the administrator.'
@@ -54,6 +60,13 @@ export default {
     }
 }
 </script>
-
-<style>
+<style >
+.start {
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    text-align: center;
+}
 </style>

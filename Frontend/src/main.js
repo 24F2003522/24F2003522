@@ -11,6 +11,7 @@ import AssignStaff from './view/AssignStaff.vue'
 import Bookings from './view/Bookings.vue'
 import Participants from './view/Participants.vue'
 import BookingTreakingHistory from './view/BookingTreakingHistory.vue'
+import EditUser from './view/EditUser.vue'
 
 
 const routes = [
@@ -25,6 +26,7 @@ const routes = [
     {path: '/bookings', component: Bookings},
     {path: '/participants/:trekId', component: Participants, props: true},
     {path: '/booking-history', component: BookingTreakingHistory},
+    {path: '/edit-user', component: EditUser},
     
 
     { path: '/:pathMatch(.*)*', redirect: '/home' },

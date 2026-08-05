@@ -87,25 +87,25 @@ export default {
         }
     },
     methods: {
-  async cancelBooking(bookingId) {
-    alert(bookingId)
-    const token = localStorage.getItem('token')
-    
-      await axios.post(`http://127.0.0.1:5000/user/cancel/${bookingId}`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      alert("Cancellation successful!")
+        async cancelBooking(bookingId) {
+            alert(bookingId)
+            const token = localStorage.getItem('token')
 
-      // Update local state immediately
-      const booking = this.bookings.find(b => b.id === bookingId)
-      if (booking) {
-        booking.status = "cancel"
-    //     booking.treakingStatus = "cancelled"
-    //     this.history.push(booking)
-    //     this.bookings = this.bookings.filter(b => b.id !== bookingId)
-      }
-    } 
-  }
+            await axios.post(`http://127.0.0.1:5000/user/cancel/${bookingId}`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            alert("Cancellation successful!")
+
+            // Update local state immediately
+            const booking = this.bookings.find(b => b.id === bookingId)
+            if (booking) {
+                booking.status = "cancel"
+
+                this.history.push(booking)
+                this.bookings = this.bookings.filter(b => b.id !== bookingId)
+            }
+        }
+    }
 }
 
 </script>

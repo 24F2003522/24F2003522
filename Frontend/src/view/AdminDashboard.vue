@@ -1,32 +1,37 @@
-<template>
-    <div>
-        <h2>Admin Dashboard</h2>
-        <p v-if="message" style="color: red;">{{ message }}</p>
-        <p>Total Treks: {{ stats.treks }}</p>
-        <p>Total Users: {{ stats.users }}</p>
-        <p>Total Staff: {{ stats.staff }}</p>
-        <p>Total Bookings: {{ stats.bookings }}</p>
-        <h3>Search</h3>
-        <input v-model="searchQuery" placeholder="Search by name or ID" />
-        <button @click="searchData">Search</button>
+<template class="dashboard">
 
-        <div v-if="searchResults">
-            <h4>Treks</h4>
-            {{ searchResults.treks.length === 0 ? 'No treks found.' : '' }}
-            <div v-for="t in searchResults.treks" :key="t.id">
-                {{ t.name }} - {{ t.location }}
-            </div>
+    <h1>Admin Dashboard</h1>
+    <h3 style="text-align: right;" class="red">
+  <button @click="logout">Logout</button>
+</h3>
+    <p v-if="message" style="color: red;">{{ message }}</p>
+    <h3>Total Treks: {{ stats.treks }}</h3>
+    <h3>Total Users: {{ stats.users }}</h3>
+    <h3>Total Staff: {{ stats.staff }}</h3>
+    <h3>Total Bookings: {{ stats.bookings }}</h3>
 
-            <h4>Users</h4>
-            {{ searchResults.users.length === 0 ? 'No users found.' : '' }}
-            <div v-for="u in searchResults.users" :key="u.id">
-                {{ u.name }} - {{ u.email }} - {{ u.role }}
-            </div>
+    <h3 style=" text-align: left;" class="blue"><router-link to="/bookings">View Bookings</router-link></h3>
+    <h3>Search</h3>
+    <input v-model="searchQuery" placeholder="Search by name or ID" />
+    <button @click="searchData">Search</button>
 
-
+    <div v-if="searchResults">
+        <h4>Treks</h4>
+        {{ searchResults.treks.length === 0 ? 'No treks found.' : '' }}
+        <div v-for="t in searchResults.treks" :key="t.id">
+            {{ t.name }} - {{ t.location }}
         </div>
 
-        <h3>Add New Trek</h3>
+        <h4>Users</h4>
+        {{ searchResults.users.length === 0 ? 'No users found.' : '' }}
+        <div v-for="u in searchResults.users" :key="u.id">
+            {{ u.name }} - {{ u.email }} - {{ u.role }}
+        </div>
+
+
+    </div>
+    <div>
+        <h2>Add New Trek</h2>
         <form @submit.prevent="addTrek">
             <input v-model="newTrek.name" placeholder="Trek Name" required />
             <input v-model="newTrek.location" placeholder="Location" required />
@@ -34,9 +39,8 @@
 
             <select v-model="newTrek.status">
                 <option>open</option>
-                <option>closed</option>
-                <option>started</option>
-                <option>ongoing</option>
+                <option>pending</option>
+                <option>approved</option>
                 <option>completed</option>
             </select>
             <select v-model="newTrek.difficulty">
@@ -46,57 +50,68 @@
             </select>
             <button type="submit">Add Trek</button>
         </form>
-        <h3>Manage Trek</h3>
-        <div v-for="trek in trek" :key="trek.id">
+        <h3 style=" text-align: left;" class="red"><router-link to="/assign-staff">Assign Staff</router-link></h3>
+    </div>
+    <h2>Manage Trek</h2>
+    <div class="scroll">
+
+        <p v-for="trek in trek" :key="trek.id">
             <!-- <p>{{ trek.name }} - {{ trek.location }} - Slots: {{ trek.slots }}</p>
             <button @click="deleteTrek(trek.id)">Delete</button>
             <button @click="editTrek(trek.id)">Edit</button> -->
-            
-            <input v-model="trek.name" placeholder={{ trek.name }} />
-            <input v-model="trek.location" placeholder={{ trek.location }} />
-            <input v-model.number="trek.slots" type="number" placeholder={{ trek.slots }} />
-            
-            <select v-model="trek.status" >
+
+            <input v-model="trek.name" />
+            <input v-model="trek.location" />
+            <input v-model.number="trek.slots" type="number" />
+
+            <select v-model="trek.status">
                 <option value="open">Open</option>
                 <option value="closed">Closed</option>
-                <option value="started">Started</option>
-                <option value="ongoing">Ongoing</option>
-                <option value="completed">Completed</option>
+                <option value="pending">Pending</option>
+                <option valur="approved">Approved</option>
+               <option value="completed">Completed</option>
             </select>
             <select v-model="trek.difficulty">
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
                 <option value="hard">Hard</option>
             </select>
+            <select v-model="trek.staff_id">
+                <option value="">None</option>
+                <option v-for="s in user" :key="s.id" :value="s.id">
+                    {{ s.name }}
+                </option>
+            </select>
             <button @click="deleteTrek(trek.id)">Delete</button>
             <button @click="editTrek(trek)">Save Changes</button>
-        </div>
-        <h3>Add New Staff</h3>
-        <form @submit.prevent="addStaff">
-            <input v-model="newStaff.name" placeholder="Staff Name" required />
-            <input v-model="newStaff.email" type="email" placeholder="Email" required />
-            <input v-model="newStaff.password" type="password" placeholder="Password" required />
-            <button type="submit">Add Staff</button>
-        </form>
-        <h3>Manage Users and Staff</h3>
-        <div v-for="user in user" :key="user.id">
 
-            <input v-model="user.name" placeholder={{ user.name }} />
-            <input v-model="user.email" placeholder={{ user.email }} />
+        </p>
+    </div>
+    <h2>Add New Staff</h2>
+    <form @submit.prevent="addStaff">
+        <input v-model="newStaff.name" placeholder="Staff Name" required />
+        <input v-model="newStaff.email" type="email" placeholder="Email" required />
+        <input v-model="newStaff.password" type="password" placeholder="Password" required />
+        <button type="submit">Add Staff</button>
+    </form>
+    <h2>Manage Users and Staff</h2>
+    <div class="scroll">
+
+        <p v-for="user in user" :key="user.id">
+
+            <input v-model="user.name" />
+            <input v-model="user.email" />
             <select v-model="user.status">
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
-                </select>
+            </select>
 
             <button @click="deleteUser(user.id)">Delete</button>
             <button @click="editUser(user)">Save Changes</button>
-        </div>
-        <router-link to="/assign-staff">Assign Staff</router-link>
-        <div><router-link to="/bookings">Bookings</router-link></div>
-
-
-
+        </p>
     </div>
+
+
 </template>
 <script>
 import axios from 'axios'
@@ -104,9 +119,9 @@ export default {
     name: 'Admin',
     data() {
         return {
-            stats: { treks: 0, users: 0, staff: 0, bookings: 0 },
+            stats: {},
             newTrek: {},
-            newStaff: { name: '', email: '', password: '' },
+            newStaff: {},
             message: '',
             trek: [], user: [],
             searchQuery: '',
@@ -143,10 +158,25 @@ export default {
     },
     methods: {
         async addTrek() {
-            await axios.post('http://127.0.0.1:5000/creatTrek', this.newTrek, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-            })
-            alert("Trek created!")
+            try {
+                await axios.post('http://127.0.0.1:5000/creatTrek', this.newTrek, {
+                    headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                })
+                alert("Trek created!")
+                this.newTrek = { name: '', location: '', slots: '' }
+                const token = localStorage.getItem('token');
+                const trekRes = await axios.get('http://127.0.0.1:5000/allTreks', {
+                    headers: { Authorization: `Bearer ${token}` }
+                })
+                this.trek = trekRes.data
+                this.user = userRes.data;
+            }
+            catch (error) {
+                console.error('Error creating trek:', error)
+                this.message = error?.response?.data?.message || 'Failed to create trek.'
+                alert(this.message)
+                this.message = ''
+            }
         },
         async deleteTrek(id) {
             await axios.delete(`http://127.0.0.1:5000/deleteTrek/${id}`, {
@@ -160,18 +190,27 @@ export default {
 
             await axios.put(`http://127.0.0.1:5000/updateTrek/${trek.id}`, {
                 name: trek.name,
-                location: trek.location,
-                slots: trek.slots,status: trek.status,difficulty: trek.difficulty
+                location: trek.location, staff_id: trek.staff_id,
+                slots: trek.slots, status: trek.status, difficulty: trek.difficulty
             }, {
                 headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
             })
             alert("Trek updated!")
         },
         async addStaff() {
+            try {
             await axios.post('http://127.0.0.1:5000/addStaff', this.newStaff, {
                 headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
             })
             alert("Staff added!")
+            this.user.push(response.data);
+            this.newStaff = { name: '', email: '', password: '' }
+        } catch (error) {
+            console.error('Error adding staff:', error)
+            this.message = error?.response?.data?.message || 'Failed to add staff.'
+            alert(this.message)
+            this.message=''
+        }
         },
         async editUser(user) {
             alert("Editing user with ID: " + user.id)
@@ -179,7 +218,7 @@ export default {
                 name: user.name,
                 email: user.email,
                 status: user.status,
-                
+
             }, {
                 headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
             })
@@ -189,7 +228,7 @@ export default {
             await axios.delete(`http://127.0.0.1:5000/deleteUser/${id}`, {
                 headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
             })
-                alert("User deleted!")
+            alert("User deleted!")
             this.user = this.user.filter(u => u.id !== id)
         },
         async searchData() {
@@ -204,8 +243,21 @@ export default {
                 console.error('Search error:', error)
                 this.message = error?.response?.data?.message || 'Failed to search.'
             }
-        }
+        },
+    
+  logout() {
+    localStorage.removeItem('token')
+    localStorage.removeItem('role')
+    this.$router.push('/')   
+    alert("You have been logged out successfully!")
+  }
     }
 }
 
 </script>
+<style>
+.scroll {
+    max-height: 300px;
+    overflow-y: auto;
+}
+</style>

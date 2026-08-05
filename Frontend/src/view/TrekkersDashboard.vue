@@ -1,9 +1,11 @@
 <template>
-  <div>
-    <h2>User Dashboard</h2>
-    <p v-if="message" style="color:red">{{ message }}</p>
-
-    <h3>Search & Filter Treks</h3>
+  <h1>User Dashboard</h1>
+    <h3 style="text-align: right;" class="red">
+  <button @click="logout">Logout</button>
+</h3>
+   <h3 style=" text-align: left;" class="red"> <router-link to="/edit-user">Edit Profile</router-link></h3>
+  
+    <div><h2>Search & Filter Treks</h2>
     <input v-model="searchQuery" placeholder="Search by name or location" />
     <select v-model="filterDifficulty">
       <option value="">All Difficulties</option>
@@ -13,7 +15,7 @@
     </select>
     <button @click="loadTreks">Apply Filters</button>
 
-    <h3>Available Treks</h3>
+    <h2>Available Treks</h2>
     <div v-for="t in treks" :key="t.id" class="trek-card">
       <p>
         <strong>{{ t.name }}</strong> - {{ t.location }}
@@ -26,11 +28,13 @@
       </button>
 
       
-    </div>
-    <router-link to="/booking-history">View Booking & Trekking History</router-link>
+    </div></div>
+    
+    <h3 style=" text-align: left;" class="blue">
+      <router-link to="/booking-history">View Booking & Trekking History</router-link></h3>
 
 
-  </div>
+  
 </template>
 
 <script>
@@ -80,6 +84,13 @@ export default {
         alert(err?.response?.data?.message || 'Booking failed')
       }
     },
+    
+  logout() {
+    localStorage.removeItem('token')
+    localStorage.removeItem('role')
+    this.$router.push('/')   
+    alert("You have been logged out successfully!")
+  }
 
       
     }
@@ -89,27 +100,82 @@ export default {
 </script>
 
 <style>
-.trek-card,
-.booking-card,
-.history-card {
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  padding: 10px;
-  margin: 8px 0;
-  background: #f9f9f9;
+
+div {
+  max-width: 10000px;
+  margin: 30px auto;
+  padding: 20px;
+  background: #c8c0c0;
+  border-radius: 10px;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+  
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif ;
+  
 }
 
+
+
+input, select {
+  padding: 8px;
+  margin: 6px 10px 12px 0;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.3s;
+}
+
+input:focus, select:focus {
+  border-color: #4CAF50;
+  outline: none;
+}
+
+
+.trek-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 15px;
+  margin: 12px 0;
+  background: #f9f9f9;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.trek-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* Buttons */
 button {
   background: #4CAF50;
   color: white;
   border: none;
-  padding: 6px 12px;
-  border-radius: 4px;
+  padding: 8px 16px;
+  border-radius: 6px;
   cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s;
+}
+
+button:hover {
+  background: #45a049;
 }
 
 button:disabled {
   background: #ccc;
   cursor: not-allowed;
 }
+
+
+a {
+  display: inline-block;
+  margin-top: 20px;
+  color: #4CAF50;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
 </style>

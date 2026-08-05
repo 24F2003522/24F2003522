@@ -1,6 +1,7 @@
 <template>
-    <div class="register">
-        <h2>Register</h2>
+<!-- <router-link to="/">Home Page</router-link> -->
+    <h1>Register</h1>
+    <div class="start">
         <form @submit.prevent="register">
             <div>
                 <label for="name">Name:</label>
@@ -14,13 +15,16 @@
                 <label for="password">Password:</label>
                 <input type="password" v-model="password" required />
             </div>
-            <button type="submit">Register</button>
+           <button type="submit">Register</button>
         </form>
         <p>{{ message }}</p>
+        <router-link to="/login">Already have an account? Login here</router-link>
     </div>
+    
 </template>
 <script>
 import axios from 'axios'
+import router from '../main';
 
 export default {
     name: 'Register',
@@ -49,8 +53,3 @@ export default {
     }
 }
 </script>
-
-
-<style lang="scss" scoped>
-
-</style>

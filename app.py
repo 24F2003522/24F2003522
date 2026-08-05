@@ -2,10 +2,15 @@ from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 import os
+import redis
+from datetime import timedelta,datetime
 from flask_cors import CORS
+from flask_caching import Cache
+    
 
 
 app = Flask(__name__)
+Cache(app, config={'CACHE_TYPE': 'simple'})
 CORS(app, resources={r"/*": {"origins": "*"}})
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.root_path, 'instance', 'trekking.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -13,6 +18,16 @@ app.config['JWT_SECRET_KEY'] = 'super-secret-key-change-this-in-production-12345
 db = SQLAlchemy(app)
 JWTManager(app)
 
+app.config["CACHE_TYPE"] = "RedisCache"
+app.config["CACHE_REDIS_HOST"] = "localhost"
+app.config["CACHE_REDIS_PORT"] = 6379
+app.config["CACHE_REDIS_DB"] = 0
+app.config["CACHE_DEFAULT_TIMEOUT"] = 60
+
+cache = Cache(app)
+
+def clear_cache():
+    cache.clear()
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -42,7 +57,7 @@ class Booking(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     trek_id = db.Column(db.Integer, db.ForeignKey('trek.id'))
-    booking_date = db.Column(db.String(20))
+    booking_date = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(20), default="booked") 
     user = db.relationship('User', backref='bookings')
     trek = db.relationship('Trek', backref='bookings')
@@ -55,9 +70,6 @@ class StaffProfile(db.Model):
     experience = db.Column(db.String(50))
     specialization = db.Column(db.String(100))
     status = db.Column(db.String(20), default="active")
-
-
-
 
 
 @app.route('/')
@@ -98,10 +110,12 @@ def login():
 
     access_user = create_access_token(identity=str(user.id))
     print("user logged in")
-    return jsonify({"token": access_user,"message": "Login successful",'role': user.role,'status': user.status}), 200
-
+    return jsonify({"token": access_user,"message": "Login successful",'role': user.role
+                    ,'status': user.status,"name":user.name}), 200
+#admin
 @app.route('/adminDashboard', methods=['GET'])
 @jwt_required()
+@cache.cached(timeout=60) # cashe 1
 def adminDashboard():
     # .get() always searches by primary key
     user_id = get_jwt_identity()
@@ -114,11 +128,11 @@ def adminDashboard():
     totalTreks = Trek.query.count()
     totalBookings = Booking.query.count()
     totalStaff = User.query.filter_by(role="staff").count()
+    print("this is the end ")
 
     return jsonify({
         "users": totalUsers,"treks": totalTreks,"bookings": totalBookings,"staff": totalStaff
     })
-
 
 @app.route('/creatTrek',methods=['POST'])
 @jwt_required()
@@ -129,6 +143,9 @@ def creatTrek():
         print("Failed to access admin dashboard")
         return jsonify({"message": " You are not admin"}), 403
     data=request.get_json(silent=True) or {}
+    existing_trk = Trek.query.filter_by(name = data['name'] , location = data['location']).first()
+    if existing_trk:
+            return jsonify({"message": "Trek already exists"}), 400
     trek=Trek(name=data['name'],location=data['location'],
               slots=data['slots'],status=data.get('status', 'open'),difficulty=data.get('difficulty', 'easy')
               )
@@ -164,6 +181,10 @@ def addStaff():
         print("Failed to access admin dashboard")
         return jsonify({"message": " You are not admin"}), 403
     data=request.get_json(silent=True) or {}
+    existing_user = User.query.filter((User.email == data['email']) & (User.name == data['name'])).first()
+    #existing_user = User.query.filter_by(email == data['email'], User.name == data['name']).first()
+    if existing_user:
+        return jsonify({"message": "Staff already exists"}), 400
     staff=User(name=data['name'],email=data['email'],password=data['password'],role='staff')
     db.session.add(staff)
     db.session.commit()
@@ -204,6 +225,7 @@ def updateTrek(trek_id):
     trek.slots=data.get('slots',trek.slots)
     trek.status=data.get('status',trek.status)
     trek.difficulty=data.get('difficulty',trek.difficulty)
+    trek.staff_id=data.get('staff_id',trek.staff_id)
     db.session.commit()
     return jsonify({"message":"Trek updated successfully"}),200
 
@@ -321,13 +343,31 @@ def allStaff():
     staff = User.query.filter_by(role="staff").all()
     staff_list = [{"id": s.id, "name": s.name, "email": s.email, "contact": s.contact} for s in staff]
     return jsonify(staff_list), 200
+@app.route('/allBookings',methods=['GET'])
+@jwt_required()
+def allBookings():
+    bookings = Booking.query.all()
+    booking_list = []
+    for b in bookings:
+        user = User.query.get(b.user_id)
+        trek = Trek.query.get(b.trek_id)
+        booking_list.append({
+            "id": b.id,
+            "user_name": user.name,
+            "trek_name": trek.name,
+            "status": b.status,
+            "staff_name": trek.staff.name if trek.staff else None
+        })
+    return jsonify(booking_list), 200
 
-
+#staff
 @app.route('/staffDashboard', methods=['GET'])
 @jwt_required()
+@cache.cached(timeout=60) # cashe 2
 def staffDashboard():
     staff_id = get_jwt_identity()
     staff = User.query.get(staff_id)
+    print(staff.name)
     if staff.role != 'staff':
         return jsonify({"message": "You are not staff"}), 403
 
@@ -339,10 +379,10 @@ def staffDashboard():
             "name": t.name,
             "location": t.location,
             "slots": t.slots,
-            "status": t.status,
+            "status": t.status, 
             "registered_count": Booking.query.filter_by(trek_id=t.id).count()
         })
-    return jsonify(trek_list), 200
+    return jsonify({"trek_list": trek_list , "staff_name": staff.name}), 200
 
 @app.route('/staff/updateTrek/<int:trek_id>', methods=['PUT'])
 @jwt_required()
@@ -387,8 +427,10 @@ def staffParticipants(trek_id):
     return jsonify(participants), 200
 
 
+#user
 @app.route("/user/allTreks", methods=["GET"])
 @jwt_required()
+@cache.cached(timeout=60) # cashe 3
 def all_Trek():
     
     print("allTrek")
@@ -404,7 +446,7 @@ def all_Trek():
     query=request.args.get('q')
     difficulty=request.args.get('difficulty')
     print("query:", query, difficulty)
-    # if query or difficulty:                    #fail when any of input is empty
+    # if query or difficulty:                    #fail when any of input is empty ans cass-sencitive
     #     print("Filtering treks based on query and difficulty")
     #     trek = Trek.query.filter(Trek.name.contains(query) | Trek.location.contains(query) |
     #                                Trek.difficulty.contains(difficulty)).all()
@@ -416,21 +458,16 @@ def all_Trek():
         trek = [t for t in trek if difficulty.lower() in t.difficulty.lower()]
    
     for trek in trek:
-        book=Booking.query.filter_by(user_id=user_id,status="booked",trek_id=trek.id)
+        book=Booking.query.filter_by(user_id=user_id,status="booked",trek_id=trek.id).first()
         if book:
-            pass
-        
-        
-        print(trek)
-       # print("Appending trek:", trek.id, trek.name)
-       
-        trek_list.append({"id":trek.id, "location":trek.location, 
-                          "name":trek.name, "slots":trek.slots ,
-                          "staff_id": trek.staff_id,"status": trek.status,"difficulty": trek.difficulty,
-        "staff_name": trek.staff.name if trek.staff else None })
-      
-    return jsonify(trek_list),200  
+            print(book.trek_id)
 
+        else:
+            trek_list.append({"id":trek.id, "location":trek.location, 
+                                      "name":trek.name, "slots":trek.slots ,
+                                      "staff_id": trek.staff_id,"status": trek.status,"difficulty": trek.difficulty,
+                    "staff_name": trek.staff.name if trek.staff else None })
+    return jsonify(trek_list),200  
 
 @app.route('/user/book/<int:trek_id>', methods=['POST'])
 @jwt_required()
@@ -512,14 +549,32 @@ def cancel(book_id):
     trek=Trek.query.get(trekId)
     trek.slots +=1
     db.session.commit()
-
-    
-
-    
     return jsonify({"message": "Booking successful"}), 200
 
+@app.route('/user/profile',methods=['GET'])
+@jwt_required()
+def UserProfile():
+    user_id = get_jwt_identity()
+    user=User.query.get(user_id)
+    if user.role !="user":
+        return jsonify ({"message":"Invalid User"})
+    return jsonify({"name": user.name, "email": user.email,"password":user.name}), 200
 
+@app.route('/user/profile/edit', methods=['PUT'])
+@jwt_required()
+def edit_profile():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user.role != "user":
+        return jsonify({"message": "Invalid User"}), 403
 
+    data = request.get_json()
+    user.name = data.get("name", user.name)
+    user.email = data.get("email", user.email)
+    user.password = data.get("password", user.password)
+
+    db.session.commit()
+    return jsonify({"message": "Profile updated successfully"}), 200
 
 if __name__ == '__main__':
     with app.app_context():
