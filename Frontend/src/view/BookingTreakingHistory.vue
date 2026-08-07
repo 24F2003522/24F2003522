@@ -1,5 +1,5 @@
 <template>
-    <div>
+   
         <h1>Booking</h1>
         <div v-if="bookings.length === 0">
             <p>No booking history available.</p>
@@ -54,7 +54,7 @@
                 </tbody>
             </table>
         </div>
-    </div>
+   
 </template>
 <script>
 import axios from 'axios'

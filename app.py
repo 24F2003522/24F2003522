@@ -1,22 +1,28 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
-import os
-import redis
-from datetime import timedelta,datetime
-from flask_cors import CORS
+from flask_mail import Mail,Message
 from flask_caching import Cache
-    
+from flask_cors import CORS
+from celery_app import make_celery, celery_app
+from celery.result import AsyncResult
+from dotenv import load_dotenv
+import os
+from sqlalchemy import text
+from datetime import timedelta, datetime, date
+from celery import Celery
+from celery.schedules import crontab
 
+# Load .env file
+load_dotenv()
 
+# Create Flask app
 app = Flask(__name__)
-Cache(app, config={'CACHE_TYPE': 'simple'})
-CORS(app, resources={r"/*": {"origins": "*"}})
+
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.root_path, 'instance', 'trekking.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['JWT_SECRET_KEY'] = 'super-secret-key-change-this-in-production-123456'
-db = SQLAlchemy(app)
-JWTManager(app)
+
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'super-secret-key-123')
 
 app.config["CACHE_TYPE"] = "RedisCache"
 app.config["CACHE_REDIS_HOST"] = "localhost"
@@ -24,7 +30,20 @@ app.config["CACHE_REDIS_PORT"] = 6379
 app.config["CACHE_REDIS_DB"] = 0
 app.config["CACHE_DEFAULT_TIMEOUT"] = 60
 
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] =  587
+app.config['MAIL_USE_TLS'] =True
+app.config['MAIL_USERNAME'] = "prajjwaldsmnru1@gmail.com"
+app.config['MAIL_PASSWORD'] = "muqb hlgo aypo nanf"
+app.config['MAIL_DEFAULT_SENDER'] ="prajjwaldsmnru1@gmail.com"
+
+# Initialize extensions
+CORS(app, resources={r"/*": {"origins": "*"}})
 cache = Cache(app)
+db = SQLAlchemy(app)
+jwt = JWTManager(app)
+mail = Mail(app)
+celery = make_celery(app)
 
 def clear_cache():
     cache.clear()
@@ -47,8 +66,8 @@ class Trek(db.Model):
     duration = db.Column(db.Integer)
     slots = db.Column(db.Integer)
     status = db.Column(db.String(20), default="open") 
-    start_date = db.Column(db.String(20))
-    end_date = db.Column(db.String(20))
+    start_date = db.Column(db.Date)
+    end_date = db.Column(db.Date)
     staff_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     staff = db.relationship('User', backref='treks_assigned')
 
@@ -146,8 +165,16 @@ def creatTrek():
     existing_trk = Trek.query.filter_by(name = data['name'] , location = data['location']).first()
     if existing_trk:
             return jsonify({"message": "Trek already exists"}), 400
+    start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+    end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
+    if start_date <= date.today():
+        return jsonify({"message": "Start date must be after today"}), 400
+    if end_date <= start_date:
+        return jsonify({"message": "End date must be after start date"}), 400
+    duration = (end_date - start_date).days    
     trek=Trek(name=data['name'],location=data['location'],
-              slots=data['slots'],status=data.get('status', 'open'),difficulty=data.get('difficulty', 'easy')
+              slots=data['slots'],status=data.get('status', 'open'),difficulty=data.get('difficulty', 'easy'),
+              end_date=end_date,start_date=start_date,duration=duration   
               )
     db.session.add(trek)
     db.session.commit()
@@ -238,12 +265,16 @@ def delete(trek_id):
         print("Failed to access admin dashboard")
         return jsonify({"message":"You are not admin"}),403
     trek=Trek.query.get(trek_id)
+    booking=Booking.query.filter_by(trek_id=trek_id)
+    for booking in booking:
+        db.session.delete(booking)
+
     if not trek:
         return jsonify({"message":"Trek not found"}),404
     db.session.delete(trek)
+    
     db.session.commit()
     return jsonify({"message":"Trek deleted successfully"}),200
-
 
 @app.route("/allUsers", methods=["GET"])
 @jwt_required()
@@ -258,8 +289,6 @@ def allUsers():
     for user in users:
         users_list.append({"id":user.id, "name":user.name, "email":user.email, "status":user.status})
     return jsonify(users_list),200  
-
-
 
 @app.route('/updateUser/<int:user_id>',methods=['PUT'])
 @jwt_required()
@@ -575,6 +604,160 @@ def edit_profile():
 
     db.session.commit()
     return jsonify({"message": "Profile updated successfully"}), 200
+
+
+# ============ CELERY ENDPOINTS ============
+
+# Endpoint 1: Trigger CSV export
+@app.route('/api/tasks/export-history', methods=['POST'])
+@jwt_required()
+def trigger_csv_export():
+    """User can download their trek history as CSV"""
+    user_id = get_jwt_identity()
+    
+    # Check user exists
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    
+    # Import and queue the task
+    from tasks import export_user_trekking_history
+    task = export_user_trekking_history.delay(user_id)
+    
+    return jsonify({
+        "message": "Export started",
+        "task_id": task.id,
+        "status": "processing"
+    }), 202
+
+
+# Endpoint 2: Check export status
+@app.route('/api/tasks/export-status/<task_id>', methods=['GET'])
+@jwt_required()
+def check_export_status(task_id):
+    """Check if export is done"""
+    # Get task result
+    task_result = AsyncResult(task_id, app=celery)
+    
+    # Return status
+    if task_result.state == 'PENDING':
+        return jsonify({
+            "state": "PENDING",
+            "status": "Processing..."
+        }), 200
+    elif task_result.state == 'SUCCESS':
+        return jsonify({
+            "state": "SUCCESS",
+            "status": "Done!",
+            "result": task_result.result
+        }), 200
+    elif task_result.state == 'FAILURE':
+        return jsonify({
+            "state": "FAILURE",
+            "status": "Failed",
+            "error": str(task_result.info)
+        }), 200
+    else:
+        return jsonify({
+            "state": task_result.state,
+            "status": "Working..."
+        }), 200
+
+
+# Endpoint 3: List user's exports
+@app.route('/api/exports', methods=['GET'])
+@jwt_required()
+def list_exports():
+    """Get list of export files for current user"""
+    user_id = get_jwt_identity()
+    
+    # Look for export files
+    export_dir = os.path.join(app.root_path, 'exports')
+    if not os.path.exists(export_dir):
+        return jsonify({"exports": []}), 200
+    
+    # Find files for this user
+    exports = []
+    all_files = os.listdir(export_dir)
+    
+    for filename in all_files:
+        if filename.startswith(f'user_{user_id}_'):
+            filepath = os.path.join(export_dir, filename)
+            file_size = os.path.getsize(filepath)
+            exports.append({
+                "filename": filename,
+                "size": file_size
+            })
+    
+    return jsonify({"exports": exports}), 200
+
+
+# Endpoint 4: Download export file
+@app.route('/api/exports/<filename>', methods=['GET'])
+@jwt_required()
+def download_export(filename):
+    """Download the CSV file"""
+    user_id = get_jwt_identity()
+    
+    # Security check: file must belong to this user
+    if not filename.startswith(f'user_{user_id}_'):
+        return jsonify({"message": "Not allowed"}), 403
+    
+    # Get file path
+    export_dir = os.path.join(app.root_path, 'exports')
+    filepath = os.path.join(export_dir, filename)
+    
+    # Check file exists
+    if not os.path.exists(filepath):
+        return jsonify({"message": "File not found"}), 404
+    
+    # Send file
+    return send_file(filepath, as_attachment=True, download_name=filename)
+
+
+# Endpoint 5: Admin - Manual reminder trigger
+@app.route('/api/tasks/send-reminder', methods=['POST'])
+@jwt_required()
+def trigger_manual_reminder():
+    """Admin can manually send reminders"""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    
+    # Check if admin
+    if not user or user.role != 'admin':
+        return jsonify({"message": "Only admin can do this"}), 403
+    
+    # Queue the task
+    from tasks import send_daily_reminder
+    task = send_daily_reminder.delay()
+    
+    return jsonify({
+        "message": "Reminder task started",
+        "task_id": task.id
+    }), 202
+
+
+# Endpoint 6: Admin - Manual report trigger
+@app.route('/api/tasks/generate-report', methods=['POST'])
+@jwt_required()
+def trigger_manual_report():
+    """Admin can manually generate report"""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    
+    # Check if admin
+    if not user or user.role != 'admin':
+        return jsonify({"message": "Only admin can do this"}), 403
+    
+    # Queue the task
+    from tasks import generate_monthly_report
+    task = generate_monthly_report.delay()
+    
+    return jsonify({
+        "message": "Report task started",
+        "task_id": task.id
+    }), 202
+
 
 if __name__ == '__main__':
     with app.app_context():

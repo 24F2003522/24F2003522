@@ -36,6 +36,8 @@
             <input v-model="newTrek.name" placeholder="Trek Name" required />
             <input v-model="newTrek.location" placeholder="Location" required />
             <input v-model="newTrek.slots" type="number" placeholder="Slots" required />
+            <input v-model="newTrek.start_date" type="date" placeholder="Start Date" required />
+            <input v-model="newTrek.end_date" type="date" placeholder="End Date" required />
 
             <select v-model="newTrek.status">
                 <option>open</option>
@@ -169,7 +171,7 @@ export default {
                     headers: { Authorization: `Bearer ${token}` }
                 })
                 this.trek = trekRes.data
-                this.user = userRes.data;
+                
             }
             catch (error) {
                 console.error('Error creating trek:', error)
@@ -199,11 +201,16 @@ export default {
         },
         async addStaff() {
             try {
+                const token = localStorage.getItem('token')
             await axios.post('http://127.0.0.1:5000/addStaff', this.newStaff, {
                 headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
             })
             alert("Staff added!")
-            this.user.push(response.data);
+            //this.user.push(response.data);
+            const userRes = await axios.get('http://127.0.0.1:5000/allUsers', {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            this.user = userRes.data
             this.newStaff = { name: '', email: '', password: '' }
         } catch (error) {
             console.error('Error adding staff:', error)
