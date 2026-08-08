@@ -4,17 +4,13 @@ from flask_jwt_extended import JWTManager, create_access_token, jwt_required, ge
 from flask_mail import Mail,Message
 from flask_caching import Cache
 from flask_cors import CORS
-from celery_app import make_celery, celery_app
 from celery.result import AsyncResult
-from dotenv import load_dotenv
 import os
-from sqlalchemy import text
+from sqlalchemy import text,func
 from datetime import timedelta, datetime, date
 from celery import Celery
 from celery.schedules import crontab
-
-# Load .env file
-load_dotenv()
+import csv
 
 # Create Flask app
 app = Flask(__name__)
@@ -37,13 +33,163 @@ app.config['MAIL_USERNAME'] = "prajjwaldsmnru1@gmail.com"
 app.config['MAIL_PASSWORD'] = "muqb hlgo aypo nanf"
 app.config['MAIL_DEFAULT_SENDER'] ="prajjwaldsmnru1@gmail.com"
 
-# Initialize extensions
 CORS(app, resources={r"/*": {"origins": "*"}})
 cache = Cache(app)
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
 mail = Mail(app)
+
+def make_celery(flask_app):
+    celery_app = Celery(
+        flask_app.import_name,
+        broker="redis://localhost:6379/1",
+        backend="redis://localhost:6379/1",
+    )
+    celery_app.conf.update(
+        timezone="Asia/Kolkata",
+        enable_utc=True,
+        beat_schedule={
+            "daily-trek-reminder": {
+                "task": "send_trek_reminders",
+                # "schedule": crontab(hour=7, minute=0)
+                "schedule": timedelta(hours=1, minutes=1)
+            },"monthly-admin-report": {
+                "task": "send_monthly_admin_report",
+                "schedule": crontab(hour=8, minute=0, day_of_month=1)
+                # "schedule": timedelta(hours=0, minutes=1, seconds=10)
+        },
+        },
+    )
+
+    class ContextTask(celery_app.Task):
+        def __call__(self, *args, **kwargs):
+            with flask_app.app_context():
+                return self.run(*args, **kwargs)
+
+    celery_app.Task = ContextTask
+    return celery_app
+
 celery = make_celery(app)
+
+@celery.task(name="send_trek_reminders")
+def send_trek_reminders():
+    treks = Trek.query.filter(Trek.status == "open").all()
+    sent = 0
+    
+    for trek in treks:
+        active_bookings=[b for b in trek.bookings if b.status == "booked"]
+        for b in active_bookings:
+            user = b.user
+            msg = Message(
+                subject=f"Reminder: {trek.name} starts tomorrow!",
+                recipients=[user.email],
+                body=(
+                    f"Hi {user.name },\n\n"
+                    f"Your trek \"{trek.name}\" at {trek.location} "
+                    f"starts on {trek.start_date}.\n\n"
+                    f"Difficulty: {trek.difficulty}\n"
+                    f"Duration: {trek.duration}\n\n"
+                    f"See you on the trail!\n"
+                ),
+            )
+            mail.send(msg)
+            sent += 1
+
+    return f"Sent {sent} reminder(s)"
+
+@celery.task(name="send_monthly_admin_report")
+def send_monthly_admin_report():
+    today = date.today()
+    first_of_this_month = today.replace(day=1)
+    last_month_end = first_of_this_month - timedelta(days=1)
+    last_month_start = last_month_end.replace(day=1)
+    month_label = last_month_start.strftime("%B %Y")  
+    
+    conducted = Trek.query.filter(Trek.status == "open",#Trek.end_date >= last_month_start,Trek.end_date <= last_month_end,
+                                  ).all()
+    
+
+    participants = (Booking.query.join(Trek, Booking.trek_id == Trek.id).filter(Booking.status.in_(["Completed", "booked"]),
+            #Trek.status == "open",Trek.end_date >= last_month_start,Trek.end_date <= last_month_end,
+            ).count())
+
+    popular= (
+    db.session.query(Trek.name,func.count(Booking.id).label("count")).join(Booking, Booking.trek_id == Trek.id)   
+             .filter(Trek.status == "open",#Trek.end_date >= last_month_start,Trek.end_date <= last_month_end,         
+              Booking.status.in_(["completed", "booked"])).group_by(Trek.id).order_by(func.count(Booking.id).desc())     
+             .limit(5).all())
+
+    if popular:
+        popular_html = "".join(f"<li>{name} — {count} participant(s)</li>"
+            for name, count in popular)
+    else:
+        popular_html = "<li>No treks completed last month</li>"
+
+    conducted_names = ", ".join(t.name for t in conducted) if conducted else "None"
+
+    html_body = f"""
+    <h2>Monthly Trekking Activity Report — {month_label}</h2>
+    <p>Summary for <strong>{month_label}</strong>:</p>
+    <ul>
+        <li><strong>Treks conducted:</strong> {len(conducted)}</li>
+        <li><strong>Total participants:</strong> {participants}</li>
+        <li><strong>Treks:</strong> {conducted_names}</li>
+    </ul>
+    <h3>Popular treks</h3>
+    <ul>{popular_html}</ul>
+    <p>— Trekking Admin System</p>
+    """
+
+    admin = User.query.filter_by(role="admin").all()
+    print(admin)
+    if not admin:
+        return "No admin users found"
+
+    sent = 0
+    for admin in admin:
+        if not admin.email or admin.email == "admin":
+            print('invalid admin email')
+            continue  
+        msg = Message(subject=f"Monthly Trekking Report — {month_label}",recipients=[admin.email],
+            html=html_body,)
+        mail.send(msg)
+        sent += 1
+
+    return f"Monthly report sent to {sent} admin(s) for {month_label}"
+
+@celery.task(name="export_trekking_history")
+def export_trekking_history(user_id):
+    user = User.query.get(user_id)
+    if not user:
+        return "User not found"
+
+    bookings = Booking.query.filter_by(user_id=user_id).all()
+
+    # Save CSV file
+    os.makedirs("exports", exist_ok=True)
+    filename = f"exports/trek_history_{user_id}_{date.today()}.csv"
+
+    with open(filename, "w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["Trek Name", "Location", "Start Date", "End Date", "Status"])
+        for b in bookings:
+            writer.writerow([
+                b.trek.name,
+                b.trek.location,
+                b.trek.start_date,
+                b.trek.end_date,
+                b.status
+            ])
+
+    # Notify user (email)
+    msg = Message(
+        subject="Your Trekking History Export is Ready",
+        recipients=[user.email],
+        body=f"Hi {user.name},\n\nYour trekking history has been exported successfully.\nFile: {filename}\n\n— Trekking Admin System"
+    )
+    mail.send(msg)
+
+    return f"CSV export complete for user {user_id}, saved at {filename}"
 
 def clear_cache():
     cache.clear()
@@ -56,7 +202,6 @@ class User(db.Model):
     password = db.Column(db.String(100))
     contact = db.Column(db.String(15))
     status = db.Column(db.String(20), default="active") 
-
 
 class Trek(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -71,7 +216,6 @@ class Trek(db.Model):
     staff_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     staff = db.relationship('User', backref='treks_assigned')
 
-
 class Booking(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
@@ -80,15 +224,6 @@ class Booking(db.Model):
     status = db.Column(db.String(20), default="booked") 
     user = db.relationship('User', backref='bookings')
     trek = db.relationship('Trek', backref='bookings')
-
-class StaffProfile(db.Model):
-    name = db.Column(db.String(100))
-    id = db.Column(db.Integer, primary_key=True)
-    staff_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    contact = db.Column(db.String(15))
-    experience = db.Column(db.String(50))
-    specialization = db.Column(db.String(100))
-    status = db.Column(db.String(20), default="active")
 
 
 @app.route('/')
@@ -188,15 +323,16 @@ def allTrek():
     user=User.query.get(user_id)
     if user.role !="admin" :
         print("inside alltrek")
-        return jsonify({"message": " You are not admin or staff"}), 403
+        return jsonify({"message": " You are not admin"}), 403
     trek=Trek.query.all()
+    
     trek_list=[]
     print("outside allTrek")
     for trek in trek:
         trek_list.append({"id":trek.id, "location":trek.location, 
                           "name":trek.name, "slots":trek.slots ,
                           "staff_id": trek.staff_id,"status": trek.status,"difficulty": trek.difficulty,
-            "staff_name": trek.staff.name if trek.staff else None })
+            "staff_name": trek.staff.name if trek.staff and trek.staff.role == "staff" else None })
     return jsonify(trek_list),200    
 
 @app.route('/addStaff',methods=['POST'])
@@ -342,7 +478,8 @@ def search():
     users = User.query.filter(User.name.contains(query) | User.email.contains(query)).all()
 
     search_results = {
-        "treks": [{"id": trek.id, "name": trek.name, "location": trek.location, "slots": trek.slots} for trek in treks],
+        "treks": [{"id": trek.id, "name": trek.name, "location": trek.location, "slots": trek.slots,
+                    "status": trek.status, "difficulty": trek.difficulty,"staff_id": trek.staff_id} for trek in treks],
         "users": [{"id": user.id, "name": user.name, "email": user.email, "status": user.status} for user in users],
         
     }
@@ -431,6 +568,7 @@ def staffUpdateTrek(trek_id):
 
 @app.route('/participants/<int:trek_id>', methods=['GET'])
 @jwt_required()
+@cache.cached(timeout=60)
 def staffParticipants(trek_id):
     staff_id = get_jwt_identity()
     trek = Trek.query.get(trek_id)
@@ -496,7 +634,7 @@ def all_Trek():
                                       "name":trek.name, "slots":trek.slots ,
                                       "staff_id": trek.staff_id,"status": trek.status,"difficulty": trek.difficulty,
                     "staff_name": trek.staff.name if trek.staff else None })
-    return jsonify(trek_list),200  
+    return jsonify({"user_name": user.name,"treks": trek_list}), 200 
 
 @app.route('/user/book/<int:trek_id>', methods=['POST'])
 @jwt_required()
@@ -557,9 +695,7 @@ def user_history():
                         "id":h.id,
                         "trek_name": trek.name,
                         "location": trek.location,
-                        "status": h.status,"treakingStatus": trek.status
-            
-                    })
+                        "status": h.status,"treakingStatus": trek.status })
         
     print(trek.status)    
     return jsonify(history_list), 200
@@ -606,157 +742,52 @@ def edit_profile():
     return jsonify({"message": "Profile updated successfully"}), 200
 
 
-# ============ CELERY ENDPOINTS ============
+@celery.task(name="export_trekking_historys")
+def export_trekking_historys(user_id):
+    export_dir = os.path.join(app.root_path, "exports")
+    os.makedirs(export_dir, exist_ok=True)
 
-# Endpoint 1: Trigger CSV export
-@app.route('/api/tasks/export-history', methods=['POST'])
+    filename = os.path.join(export_dir, f"trek_history_{user_id}_{date.today()}.csv")
+    bookings = Booking.query.filter_by(user_id=user_id).all()
+
+    with open(filename, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Trek Name", "Location", "Status", "Booking Date"])
+        for booking in bookings:
+            trek = booking.trek
+            writer.writerow([
+                trek.name,
+                trek.location,
+                booking.status,
+                booking.booking_date.strftime("%Y-%m-%d")
+            ])
+
+    return filename   
+   
+
+@app.route("/user/exportHistory", methods=["POST"])
 @jwt_required()
-def trigger_csv_export():
-    """User can download their trek history as CSV"""
+def export_history():
     user_id = get_jwt_identity()
-    
-    # Check user exists
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({"message": "User not found"}), 404
-    
-    # Import and queue the task
-    from tasks import export_user_trekking_history
-    task = export_user_trekking_history.delay(user_id)
-    
+    task = export_trekking_historys.delay(user_id)
+    return jsonify({"message": "Export started", "task_id": task.id}), 202
+
+
+@app.route("/task/<task_id>", methods=["GET"])
+def get_task_status(task_id):
+    result = AsyncResult(task_id, app=celery)
     return jsonify({
-        "message": "Export started",
-        "task_id": task.id,
-        "status": "processing"
-    }), 202
+        "task_id": task_id,
+        "status": result.status,
+        "result": result.result if result.ready() else None
+    })
 
 
-# Endpoint 2: Check export status
-@app.route('/api/tasks/export-status/<task_id>', methods=['GET'])
+@app.route("/download/<path:filename>", methods=["GET"])
 @jwt_required()
-def check_export_status(task_id):
-    """Check if export is done"""
-    # Get task result
-    task_result = AsyncResult(task_id, app=celery)
-    
-    # Return status
-    if task_result.state == 'PENDING':
-        return jsonify({
-            "state": "PENDING",
-            "status": "Processing..."
-        }), 200
-    elif task_result.state == 'SUCCESS':
-        return jsonify({
-            "state": "SUCCESS",
-            "status": "Done!",
-            "result": task_result.result
-        }), 200
-    elif task_result.state == 'FAILURE':
-        return jsonify({
-            "state": "FAILURE",
-            "status": "Failed",
-            "error": str(task_result.info)
-        }), 200
-    else:
-        return jsonify({
-            "state": task_result.state,
-            "status": "Working..."
-        }), 200
+def download_file(filename):
+    return send_file(filename, as_attachment=True)
 
-
-# Endpoint 3: List user's exports
-@app.route('/api/exports', methods=['GET'])
-@jwt_required()
-def list_exports():
-    """Get list of export files for current user"""
-    user_id = get_jwt_identity()
-    
-    # Look for export files
-    export_dir = os.path.join(app.root_path, 'exports')
-    if not os.path.exists(export_dir):
-        return jsonify({"exports": []}), 200
-    
-    # Find files for this user
-    exports = []
-    all_files = os.listdir(export_dir)
-    
-    for filename in all_files:
-        if filename.startswith(f'user_{user_id}_'):
-            filepath = os.path.join(export_dir, filename)
-            file_size = os.path.getsize(filepath)
-            exports.append({
-                "filename": filename,
-                "size": file_size
-            })
-    
-    return jsonify({"exports": exports}), 200
-
-
-# Endpoint 4: Download export file
-@app.route('/api/exports/<filename>', methods=['GET'])
-@jwt_required()
-def download_export(filename):
-    """Download the CSV file"""
-    user_id = get_jwt_identity()
-    
-    # Security check: file must belong to this user
-    if not filename.startswith(f'user_{user_id}_'):
-        return jsonify({"message": "Not allowed"}), 403
-    
-    # Get file path
-    export_dir = os.path.join(app.root_path, 'exports')
-    filepath = os.path.join(export_dir, filename)
-    
-    # Check file exists
-    if not os.path.exists(filepath):
-        return jsonify({"message": "File not found"}), 404
-    
-    # Send file
-    return send_file(filepath, as_attachment=True, download_name=filename)
-
-
-# Endpoint 5: Admin - Manual reminder trigger
-@app.route('/api/tasks/send-reminder', methods=['POST'])
-@jwt_required()
-def trigger_manual_reminder():
-    """Admin can manually send reminders"""
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    
-    # Check if admin
-    if not user or user.role != 'admin':
-        return jsonify({"message": "Only admin can do this"}), 403
-    
-    # Queue the task
-    from tasks import send_daily_reminder
-    task = send_daily_reminder.delay()
-    
-    return jsonify({
-        "message": "Reminder task started",
-        "task_id": task.id
-    }), 202
-
-
-# Endpoint 6: Admin - Manual report trigger
-@app.route('/api/tasks/generate-report', methods=['POST'])
-@jwt_required()
-def trigger_manual_report():
-    """Admin can manually generate report"""
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    
-    # Check if admin
-    if not user or user.role != 'admin':
-        return jsonify({"message": "Only admin can do this"}), 403
-    
-    # Queue the task
-    from tasks import generate_monthly_report
-    task = generate_monthly_report.delay()
-    
-    return jsonify({
-        "message": "Report task started",
-        "task_id": task.id
-    }), 202
 
 
 if __name__ == '__main__':

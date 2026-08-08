@@ -1,6 +1,7 @@
 <template>
    
         <h1>Booking</h1>
+        <h3 style=" text-align: right;" class="red"><router-link to="/trekkers">Dashboard</router-link></h3>
         <div v-if="bookings.length === 0">
             <p>No booking history available.</p>
         </div>

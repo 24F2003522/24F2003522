@@ -2,8 +2,8 @@
 
     <h1>Admin Dashboard</h1>
     <h3 style="text-align: right;" class="red">
-  <button @click="logout">Logout</button>
-</h3>
+        <button @click="logout">Logout</button>
+    </h3>
     <p v-if="message" style="color: red;">{{ message }}</p>
     <h3>Total Treks: {{ stats.treks }}</h3>
     <h3>Total Users: {{ stats.users }}</h3>
@@ -71,7 +71,7 @@
                 <option value="closed">Closed</option>
                 <option value="pending">Pending</option>
                 <option valur="approved">Approved</option>
-               <option value="completed">Completed</option>
+                <option value="completed">Completed</option>
             </select>
             <select v-model="trek.difficulty">
                 <option value="easy">Easy</option>
@@ -80,7 +80,7 @@
             </select>
             <select v-model="trek.staff_id">
                 <option value="">None</option>
-                <option v-for="s in user" :key="s.id" :value="s.id">
+                <option v-for="s in staff" :key="s.id" :value="s.id">
                     {{ s.name }}
                 </option>
             </select>
@@ -152,6 +152,7 @@ export default {
                 headers: { Authorization: `Bearer ${token}` }
             })
             this.user = userRes.data
+            this.staff = (await axios.get('http://127.0.0.1:5000/allStaff', { headers: { Authorization: `Bearer ${token}` } })).data
 
         } catch (error) {
             console.error('Admin dashboard error:', error)
@@ -171,7 +172,7 @@ export default {
                     headers: { Authorization: `Bearer ${token}` }
                 })
                 this.trek = trekRes.data
-                
+
             }
             catch (error) {
                 console.error('Error creating trek:', error)
@@ -202,22 +203,22 @@ export default {
         async addStaff() {
             try {
                 const token = localStorage.getItem('token')
-            await axios.post('http://127.0.0.1:5000/addStaff', this.newStaff, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-            })
-            alert("Staff added!")
-            //this.user.push(response.data);
-            const userRes = await axios.get('http://127.0.0.1:5000/allUsers', {
-                headers: { Authorization: `Bearer ${token}` }
-            })
-            this.user = userRes.data
-            this.newStaff = { name: '', email: '', password: '' }
-        } catch (error) {
-            console.error('Error adding staff:', error)
-            this.message = error?.response?.data?.message || 'Failed to add staff.'
-            alert(this.message)
-            this.message=''
-        }
+                await axios.post('http://127.0.0.1:5000/addStaff', this.newStaff, {
+                    headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                })
+                alert("Staff added!")
+                //this.user.push(response.data);
+                const userRes = await axios.get('http://127.0.0.1:5000/allUsers', {
+                    headers: { Authorization: `Bearer ${token}` }
+                })
+                this.user = userRes.data
+                this.newStaff = { name: '', email: '', password: '' }
+            } catch (error) {
+                console.error('Error adding staff:', error)
+                this.message = error?.response?.data?.message || 'Failed to add staff.'
+                alert(this.message)
+                this.message = ''
+            }
         },
         async editUser(user) {
             alert("Editing user with ID: " + user.id)
@@ -246,18 +247,20 @@ export default {
                     headers: { Authorization: `Bearer ${token}` }
                 })
                 this.searchResults = response.data
+                this.trek = this.searchResults.treks
+                this.user = this.searchResults.users
             } catch (error) {
                 console.error('Search error:', error)
                 this.message = error?.response?.data?.message || 'Failed to search.'
             }
         },
-    
-  logout() {
-    localStorage.removeItem('token')
-    localStorage.removeItem('role')
-    this.$router.push('/')   
-    alert("You have been logged out successfully!")
-  }
+
+        logout() {
+            localStorage.removeItem('token')
+            localStorage.removeItem('role')
+            this.$router.push('/')
+            alert("You have been logged out successfully!")
+        }
     }
 }
 
