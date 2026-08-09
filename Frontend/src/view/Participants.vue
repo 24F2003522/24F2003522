@@ -1,4 +1,5 @@
 <template>
+  <Navbar />
   <h2>Participants for Trek ID: {{ trekId }}</h2>
   <h3 style=" text-align: right;" class="red"><router-link to="/staff">Back to Staff Dashboard</router-link></h3>
   <table>
@@ -21,9 +22,10 @@
 
 <script>
 import axios from 'axios'
+import Navbar from '../components/Navbar.vue'
 export default {
   name: 'Participants',
-  props: ['trekId'],
+  props: ['trekId'],components: { Navbar },
   data() {
     return { participants: [] }
   },

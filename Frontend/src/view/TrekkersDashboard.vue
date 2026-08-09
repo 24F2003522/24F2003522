@@ -1,5 +1,5 @@
 <template>
-  
+  <Navbar />
   <h1>User Dashboard</h1>
   <h3 style="text-align: right;" class="red">
     <button @click="logout">Logout</button>
@@ -8,7 +8,6 @@
   <button @click="exportHistory">Export Trekking History (CSV)</button>
   <p>{{ exportMessage }}</p>
   <h3 style=" text-align: left;" class="red"> <router-link to="/edit-user">Edit Profile</router-link></h3>
-
   <div>
     <h2>Search & Filter Treks</h2>
     <input v-model="searchQuery" placeholder="Search by name or location" />
@@ -19,7 +18,6 @@
       <option value="hard">Hard</option>
     </select>
     <button @click="loadTreks">Apply Filters</button>
-
     <h2>Available Treks</h2>
     <div v-for="t in treks" :key="t.id" class="trek-card">
 
@@ -31,31 +29,22 @@
       <button @click="bookTrek(t.id)">
         Book Trek
       </button>
-
-
     </div>
   </div>
-
   <h3 style=" text-align: left;" class="blue">
     <router-link to="/booking-history">View Booking & Trekking History</router-link>
   </h3>
-
-
-
 </template>
 
 <script>
+import Navbar from '../components/Navbar.vue'
 import axios from 'axios'
 export default {
-  name: 'Trekkers',
+  name: 'Trekkers', components: { Navbar },
   data() {
     return {
-      treks: [], userName: '',
-      bookings: [],
-      history: [],
-      searchQuery: '',
-      filterDifficulty: '',
-      message: ''
+      treks: [], userName: '', bookings: [],
+      history: [], searchQuery: '', filterDifficulty: '', message: ''
     }
   },
   async mounted() {
@@ -63,7 +52,7 @@ export default {
 
   },
   methods: {
-  async loadTreks() {
+    async loadTreks() {
       // alert("Loading treks...")
       const token = localStorage.getItem('token')
       console.log("Token:", token)
@@ -86,9 +75,6 @@ export default {
         })
         alert("Booking successful!")
         this.treks = this.treks.filter(t => t.id !== trekId)
-
-
-
       } catch (err) {
 
         alert(err?.response?.data?.message || 'Booking failed')
@@ -101,58 +87,56 @@ export default {
       alert("You have been logged out successfully!")
     },
 
-async exportHistory() {
-  const token = localStorage.getItem('token')
-  try {
-    const res = await axios.post('http://127.0.0.1:5000/user/exportHistory', {}, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    this.exportMessage = "Export started. Task ID: " + res.data.task_id
-    this.checkExportStatus(res.data.task_id)
-  } catch (err) {
-    this.exportMessage = 'Failed to start export'
-  }
-},
-async checkExportStatus(taskId) {
-  const token = localStorage.getItem('token')
-  const interval = setInterval(async () => {
-    try {
-      const res = await axios.get(`http://127.0.0.1:5000/task/${taskId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      if (res.data.status === "SUCCESS") {
-        clearInterval(interval)
-        this.exportMessage = "Export complete! Download link ready."
-        this.downloadCSV(res.data.result)
+    async exportHistory() {
+      const token = localStorage.getItem('token')
+      try {
+        const res = await axios.post('http://127.0.0.1:5000/user/exportHistory', {}, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        this.exportMessage = "Export started. Task ID: " + res.data.task_id
+        this.checkExportStatus(res.data.task_id)
+      } catch (err) {
+        this.exportMessage = 'Failed to start export'
       }
-    } catch (err) {
-      clearInterval(interval)
-      this.exportMessage = "Error checking export status"
+    },
+    async checkExportStatus(taskId) {
+      const token = localStorage.getItem('token')
+      const interval = setInterval(async () => {
+        try {
+          const res = await axios.get(`http://127.0.0.1:5000/task/${taskId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          if (res.data.status === "SUCCESS") {
+            clearInterval(interval)
+            this.exportMessage = "Export complete! Download link ready."
+            this.downloadCSV(res.data.result)
+          }
+        } catch (err) {
+          clearInterval(interval)
+          this.exportMessage = "Error checking export status"
+        }
+      }, 3000)
+      alert("Export Started >>> Wait !")
+    }, async downloadCSV(filePath) {
+      const token = localStorage.getItem('token')
+      try {
+        const res = await axios.get(`http://127.0.0.1:5000/download/${filePath}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          responseType: 'blob'
+        })
+
+        const url = window.URL.createObjectURL(new Blob([res.data]))
+        const link = document.createElement('a')
+        link.href = url
+        link.setAttribute('download', filePath.split('/').pop())
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      } catch (err) {
+        this.exportMessage = "Failed to download CSV"
+      } alert("Finish")
     }
-  }, 3000)
-   alert("Export Started >>> Wait !")
-},async downloadCSV(filePath) {
-  const token = localStorage.getItem('token')
-  try {
-    const res = await axios.get(`http://127.0.0.1:5000/download/${filePath}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      responseType: 'blob'
-    })
-
-    const url = window.URL.createObjectURL(new Blob([res.data]))
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', filePath.split('/').pop())
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  } catch (err) {
-    this.exportMessage = "Failed to download CSV"
-  }alert("Finish")
-}
- }
-
-
+  }
 }
 </script>
 
@@ -168,8 +152,6 @@ div {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 
 }
-
-
 
 input,
 select {
@@ -187,7 +169,6 @@ select:focus {
   outline: none;
 }
 
-
 .trek-card {
   border: 1px solid #ddd;
   border-radius: 8px;
@@ -202,7 +183,6 @@ select:focus {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-/* Buttons */
 button {
   background: #4CAF50;
   color: white;
@@ -222,7 +202,6 @@ button:disabled {
   background: #ccc;
   cursor: not-allowed;
 }
-
 
 a {
   display: inline-block;

@@ -40,23 +40,13 @@ jwt = JWTManager(app)
 mail = Mail(app)
 
 def make_celery(flask_app):
-    celery_app = Celery(
-        flask_app.import_name,
-        broker="redis://localhost:6379/1",
-        backend="redis://localhost:6379/1",
-    )
-    celery_app.conf.update(
-        timezone="Asia/Kolkata",
-        enable_utc=True,
-        beat_schedule={
-            "daily-trek-reminder": {
-                "task": "send_trek_reminders",
-                # "schedule": crontab(hour=7, minute=0)
-                "schedule": timedelta(hours=1, minutes=1)
-            },"monthly-admin-report": {
-                "task": "send_monthly_admin_report",
-                "schedule": crontab(hour=8, minute=0, day_of_month=1)
-                # "schedule": timedelta(hours=0, minutes=1, seconds=10)
+    celery_app = Celery(flask_app.import_name,broker="redis://localhost:6379/1",backend="redis://localhost:6379/1",)
+    celery_app.conf.update(timezone="Asia/Kolkata",enable_utc=True,beat_schedule={
+            "daily-trek-reminder": {"task": "send_trek_reminders","schedule": crontab(hour=7, minute=0)
+                # "schedule": timedelta(hours=1, minutes=1)
+            },"monthly-admin-report": {"task": "send_monthly_admin_report",
+            # "schedule": crontab(hour=8, minute=0, day_of_month=1)
+                "schedule": timedelta(hours=0, minutes=1, seconds=10)
         },
         },
     )
@@ -75,7 +65,6 @@ celery = make_celery(app)
 def send_trek_reminders():
     treks = Trek.query.filter(Trek.status == "open").all()
     sent = 0
-    
     for trek in treks:
         active_bookings=[b for b in trek.bookings if b.status == "booked"]
         for b in active_bookings:
@@ -104,21 +93,16 @@ def send_monthly_admin_report():
     last_month_end = first_of_this_month - timedelta(days=1)
     last_month_start = last_month_end.replace(day=1)
     month_label = last_month_start.strftime("%B %Y")  
-    
     conducted = Trek.query.filter(Trek.status == "open",#Trek.end_date >= last_month_start,Trek.end_date <= last_month_end,
                                   ).all()
-    
-
     participants = (Booking.query.join(Trek, Booking.trek_id == Trek.id).filter(Booking.status.in_(["Completed", "booked"]),
             #Trek.status == "open",Trek.end_date >= last_month_start,Trek.end_date <= last_month_end,
             ).count())
-
     popular= (
     db.session.query(Trek.name,func.count(Booking.id).label("count")).join(Booking, Booking.trek_id == Trek.id)   
              .filter(Trek.status == "open",#Trek.end_date >= last_month_start,Trek.end_date <= last_month_end,         
               Booking.status.in_(["completed", "booked"])).group_by(Trek.id).order_by(func.count(Booking.id).desc())     
              .limit(5).all())
-
     if popular:
         popular_html = "".join(f"<li>{name} — {count} participant(s)</li>"
             for name, count in popular)
@@ -162,29 +146,15 @@ def export_trekking_history(user_id):
     user = User.query.get(user_id)
     if not user:
         return "User not found"
-
     bookings = Booking.query.filter_by(user_id=user_id).all()
-
-    # Save CSV file
     os.makedirs("exports", exist_ok=True)
     filename = f"exports/trek_history_{user_id}_{date.today()}.csv"
-
     with open(filename, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["Trek Name", "Location", "Start Date", "End Date", "Status"])
         for b in bookings:
-            writer.writerow([
-                b.trek.name,
-                b.trek.location,
-                b.trek.start_date,
-                b.trek.end_date,
-                b.status
-            ])
-
-    # Notify user (email)
-    msg = Message(
-        subject="Your Trekking History Export is Ready",
-        recipients=[user.email],
+            writer.writerow([b.trek.name,b.trek.location,b.trek.start_date,b.trek.end_date,b.status])
+    msg = Message(subject="Your Trekking History Export is Ready",recipients=[user.email],
         body=f"Hi {user.name},\n\nYour trekking history has been exported successfully.\nFile: {filename}\n\n— Trekking Admin System"
     )
     mail.send(msg)
@@ -233,20 +203,12 @@ def home():
 def register():
     data = request.get_json(silent=True) or {} # return an empty dict if no JSON is provided , silent=True give none for badrequest
     # request.json 
-
     if not data.get('name') or not data.get('email') or not data.get('password'):
         return jsonify({"message": "Name, email, and password are required"}), 400
-
     existing_user = User.query.filter((User.email == data['email']) & (User.name == data['name'])).first()
     if existing_user:
         return jsonify({"message": "User already exists"}), 400
-
-    new_user = User(
-        name=data['name'],
-        email=data['email'],
-        password=data['password'],
-        role=data.get('role', 'user')
-    )
+    new_user = User(name=data['name'],email=data['email'],password=data['password'],role=data.get('role', 'user'))
     db.session.add(new_user)
     db.session.commit()
     print("new user added")
@@ -257,11 +219,9 @@ def login():
     data = request.get_json(silent=True) or {}
     if not data.get('email') or not data.get('password'):
         return jsonify({"message": "Email and password are required"}), 400
-
     user = User.query.filter_by(email=data['email'], password=data['password']).first()
     if not user:
         return jsonify({"message": "Invalid email or password"}), 401
-
     access_user = create_access_token(identity=str(user.id))
     print("user logged in")
     return jsonify({"token": access_user,"message": "Login successful",'role': user.role
@@ -329,8 +289,7 @@ def allTrek():
     trek_list=[]
     print("outside allTrek")
     for trek in trek:
-        trek_list.append({"id":trek.id, "location":trek.location, 
-                          "name":trek.name, "slots":trek.slots ,
+        trek_list.append({"id":trek.id, "location":trek.location, "name":trek.name, "slots":trek.slots ,
                           "staff_id": trek.staff_id,"status": trek.status,"difficulty": trek.difficulty,
             "staff_name": trek.staff.name if trek.staff and trek.staff.role == "staff" else None })
     return jsonify(trek_list),200    
@@ -404,11 +363,9 @@ def delete(trek_id):
     booking=Booking.query.filter_by(trek_id=trek_id)
     for booking in booking:
         db.session.delete(booking)
-
     if not trek:
         return jsonify({"message":"Trek not found"}),404
     db.session.delete(trek)
-    
     db.session.commit()
     return jsonify({"message":"Trek deleted successfully"}),200
 
@@ -469,11 +426,9 @@ def search():
     if admin.role != 'admin':
         print("Failed to access admin dashboard")
         return jsonify({"message": " You are not admin"}), 403
-
     query = request.args.get('q')
     if not query:
         return jsonify({"message": "Search query is required"}), 400
-
     treks = Trek.query.filter(Trek.name.contains(query) | Trek.location.contains(query)).all()
     users = User.query.filter(User.name.contains(query) | User.email.contains(query)).all()
 
@@ -493,7 +448,6 @@ def assignStaff(trek_id, staff_id):
     admin = User.query.get(admin_id)
     if admin.role != 'admin':
         return jsonify({"message": "You are not admin"}), 403
-
     trek = Trek.query.get(trek_id)
     staff = User.query.get(staff_id)
     if not trek or not staff or staff.role != "staff":
@@ -517,13 +471,8 @@ def allBookings():
     for b in bookings:
         user = User.query.get(b.user_id)
         trek = Trek.query.get(b.trek_id)
-        booking_list.append({
-            "id": b.id,
-            "user_name": user.name,
-            "trek_name": trek.name,
-            "status": b.status,
-            "staff_name": trek.staff.name if trek.staff else None
-        })
+        booking_list.append({"date":b.booking_date,"id": b.id,"user_name": user.name,"trek_name": trek.name,
+            "status": b.status,"staff_name": trek.staff.name if trek.staff else None})
     return jsonify(booking_list), 200
 
 #staff
@@ -540,14 +489,8 @@ def staffDashboard():
     treks = Trek.query.filter_by(staff_id=staff.id).all()
     trek_list = []
     for t in treks:
-        trek_list.append({
-            "id": t.id,
-            "name": t.name,
-            "location": t.location,
-            "slots": t.slots,
-            "status": t.status, 
-            "registered_count": Booking.query.filter_by(trek_id=t.id).count()
-        })
+        trek_list.append({"id": t.id,"name": t.name,"location": t.location,"slots": t.slots,
+            "status": t.status, "registered_count": Booking.query.filter_by(trek_id=t.id).count()})
     return jsonify({"trek_list": trek_list , "staff_name": staff.name}), 200
 
 @app.route('/staff/updateTrek/<int:trek_id>', methods=['PUT'])
@@ -576,8 +519,6 @@ def staffParticipants(trek_id):
     if not trek or int(trek.staff_id) != int(staff_id):
         print("Not authorized: trek.staff_id:", trek.staff_id, "staff_id:", staff_id)
         return jsonify({"message": "Not authorized"}), 403
-
-
     participants = []
     bookings = Booking.query.filter_by(trek_id=trek.id).all()
     
@@ -599,7 +540,6 @@ def staffParticipants(trek_id):
 @jwt_required()
 @cache.cached(timeout=60) # cashe 3
 def all_Trek():
-    
     print("allTrek")
     user_id=get_jwt_identity()
     user=User.query.get(user_id)
@@ -630,9 +570,8 @@ def all_Trek():
             print(book.trek_id)
 
         else:
-            trek_list.append({"id":trek.id, "location":trek.location, 
-                                      "name":trek.name, "slots":trek.slots ,
-                                      "staff_id": trek.staff_id,"status": trek.status,"difficulty": trek.difficulty,
+            trek_list.append({"id":trek.id, "location":trek.location, "name":trek.name, "slots":trek.slots ,
+            "staff_id": trek.staff_id,"status": trek.status,"difficulty": trek.difficulty,
                     "staff_name": trek.staff.name if trek.staff else None })
     return jsonify({"user_name": user.name,"treks": trek_list}), 200 
 
@@ -641,13 +580,10 @@ def all_Trek():
 def book_trek(trek_id):
     userId = get_jwt_identity()
     trek = Trek.query.get(trek_id)
-
     if not trek:
         return jsonify({"message": "Trek not found"}), 404
-
     if trek.status != "open" or trek.slots <= 0:
         return jsonify({"message": "Booking not allowed"}), 403
-
     existing = Booking.query.filter_by(user_id=userId, trek_id=trek_id,status="booked").first()
     if existing:
         return jsonify({"message": "Already booked"}), 400
@@ -670,12 +606,7 @@ def user_bookings():
     for b in bookings:
         trek = Trek.query.get(b.trek_id)
         if b.status=="booked":
-            booking_list.append({
-                        "id": b.id,
-                        "trek_name": trek.name ,
-                        "location": trek.location ,
-                        "status": b.status,"treakingStatus": trek.status
-                    })
+            booking_list.append({"id": b.id,"trek_name": trek.name ,"location": trek.location ,"status": b.status,"treakingStatus": trek.status })
         
     return jsonify(booking_list), 200
 
@@ -691,11 +622,8 @@ def user_history():
     for h in history:
         trek=Trek.query.get(h.trek_id)
         if h.status=="cancel" or trek.status=="completed":
-            history_list.append({
-                        "id":h.id,
-                        "trek_name": trek.name,
-                        "location": trek.location,
-                        "status": h.status,"treakingStatus": trek.status })
+            history_list.append({"id":h.id,"trek_name": trek.name,"location": trek.location,"status": h.status,
+                                 "treakingStatus": trek.status })
         
     print(trek.status)    
     return jsonify(history_list), 200
@@ -732,12 +660,10 @@ def edit_profile():
     user = User.query.get(user_id)
     if user.role != "user":
         return jsonify({"message": "Invalid User"}), 403
-
     data = request.get_json()
     user.name = data.get("name", user.name)
     user.email = data.get("email", user.email)
     user.password = data.get("password", user.password)
-
     db.session.commit()
     return jsonify({"message": "Profile updated successfully"}), 200
 
@@ -746,19 +672,14 @@ def edit_profile():
 def export_trekking_historys(user_id):
     export_dir = os.path.join(app.root_path, "exports")
     os.makedirs(export_dir, exist_ok=True)
-
     filename = os.path.join(export_dir, f"trek_history_{user_id}_{date.today()}.csv")
     bookings = Booking.query.filter_by(user_id=user_id).all()
-
     with open(filename, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["Trek Name", "Location", "Status", "Booking Date"])
         for booking in bookings:
             trek = booking.trek
-            writer.writerow([
-                trek.name,
-                trek.location,
-                booking.status,
+            writer.writerow([trek.name,trek.location,booking.status,
                 booking.booking_date.strftime("%Y-%m-%d")
             ])
 
@@ -776,9 +697,7 @@ def export_history():
 @app.route("/task/<task_id>", methods=["GET"])
 def get_task_status(task_id):
     result = AsyncResult(task_id, app=celery)
-    return jsonify({
-        "task_id": task_id,
-        "status": result.status,
+    return jsonify({"task_id": task_id,"status": result.status,
         "result": result.result if result.ready() else None
     })
 

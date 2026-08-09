@@ -1,5 +1,5 @@
 <template class="dashboard">
-
+    <Navbar />
     <h1>Admin Dashboard</h1>
     <h3 style="text-align: right;" class="red">
         <button @click="logout">Logout</button>
@@ -9,12 +9,10 @@
     <h3>Total Users: {{ stats.users }}</h3>
     <h3>Total Staff: {{ stats.staff }}</h3>
     <h3>Total Bookings: {{ stats.bookings }}</h3>
-
     <h3 style=" text-align: left;" class="blue"><router-link to="/bookings">View Bookings</router-link></h3>
     <h3>Search</h3>
     <input v-model="searchQuery" placeholder="Search by name or ID" />
     <button @click="searchData">Search</button>
-
     <div v-if="searchResults">
         <h4>Treks</h4>
         {{ searchResults.treks.length === 0 ? 'No treks found.' : '' }}
@@ -27,8 +25,6 @@
         <div v-for="u in searchResults.users" :key="u.id">
             {{ u.name }} - {{ u.email }} - {{ u.role }}
         </div>
-
-
     </div>
     <div>
         <h2>Add New Trek</h2>
@@ -38,7 +34,6 @@
             <input v-model="newTrek.slots" type="number" placeholder="Slots" required />
             <input v-model="newTrek.start_date" type="date" placeholder="Start Date" required />
             <input v-model="newTrek.end_date" type="date" placeholder="End Date" required />
-
             <select v-model="newTrek.status">
                 <option>open</option>
                 <option>pending</option>
@@ -56,16 +51,13 @@
     </div>
     <h2>Manage Trek</h2>
     <div class="scroll">
-
         <p v-for="trek in trek" :key="trek.id">
             <!-- <p>{{ trek.name }} - {{ trek.location }} - Slots: {{ trek.slots }}</p>
             <button @click="deleteTrek(trek.id)">Delete</button>
             <button @click="editTrek(trek.id)">Edit</button> -->
-
             <input v-model="trek.name" />
             <input v-model="trek.location" />
             <input v-model.number="trek.slots" type="number" />
-
             <select v-model="trek.status">
                 <option value="open">Open</option>
                 <option value="closed">Closed</option>
@@ -116,25 +108,19 @@
 
 </template>
 <script>
+import Navbar from '../components/Navbar.vue'
 import axios from 'axios'
 export default {
-    name: 'Admin',
+    name: 'Admin', components: { Navbar },
     data() {
         return {
-            stats: {},
-            newTrek: {},
-            newStaff: {},
-            message: '',
-            trek: [], user: [],
-            searchQuery: '',
-            searchResults: null
+            stats: {}, newTrek: {}, newStaff: {}, message: '', trek: [], user: [],
+            searchQuery: '', searchResults: null
         }
     },
     async mounted() {
         try {
             const token = localStorage.getItem('token')
-
-
             const response = await axios.get('http://127.0.0.1:5000/adminDashboard', {
                 headers: {
                     Authorization: `Bearer ${token}`
@@ -142,12 +128,10 @@ export default {
             })
             this.stats = response.data
             console.log('Admin dashboard data:', response.data)
-
             const trekRes = await axios.get('http://127.0.0.1:5000/allTreks', {
                 headers: { Authorization: `Bearer ${token}` }
             })
             this.trek = trekRes.data
-
             const userRes = await axios.get('http://127.0.0.1:5000/allUsers', {
                 headers: { Authorization: `Bearer ${token}` }
             })

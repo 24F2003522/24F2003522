@@ -1,19 +1,16 @@
 <template>
+  <Navbar />
   <h1>Staff Dashboard</h1>
   <h3 style="text-align: right;" class="red">
-  <button @click="logout">Logout</button>
-</h3>
-<h2>Hello {{ staff_name }}</h2>
+    <button @click="logout">Logout</button>
+  </h3>
+  <h2>Hello {{ staff_name }}</h2>
   <h2>Manage Treks</h2>
   <div v-for="t in treks" :key="t.id" class="trek-card">
-    
-      Trek name :<strong> {{ t.name }}</strong> |Location: {{ t.location }}
-      | Slots: {{ t.slots }}
-      | Status: {{ t.status }}
-      | Registered Trekkers: {{ t.registered_count }}
-    
 
-    <!-- Update slots -->
+    Trek name :<strong> {{ t.name }}</strong> |Location: {{ t.location }}| Slots: {{ t.slots }}
+    | Status: {{ t.status }}| Registered Trekkers: {{ t.registered_count }}
+
     <form @submit.prevent="updateTrek(t)">
       <label for="slots">Update Slots:</label>
       <input v-model.number="t.slots" type="number" id="slots" />
@@ -26,26 +23,26 @@
       </select>
       <button type="submit">Update Slots</button>
     </form>
-<!-- Link to participants page -->
     <router-link :to="`/participants/${t.id}`">View Participants</router-link>
   </div>
 
 </template>
 
 <script>
+import Navbar from '../components/Navbar.vue'
 import axios from 'axios'
 export default {
-  name: 'StaffDashboard',
+  name: 'StaffDashboard', components: { Navbar },
   data() {
-    return { treks: [], staff_name:'' }
+    return { treks: [], staff_name: '' }
   },
   async mounted() {
     const token = localStorage.getItem('token')
     const resor = (await axios.get('http://127.0.0.1:5000/staffDashboard', {
       headers: { Authorization: `Bearer ${token}` }
     })).data
-    this.treks=resor.trek_list
-    this.staff_name=resor.staff_name
+    this.treks = resor.trek_list
+    this.staff_name = resor.staff_name
     // alert("Welcome " + this.staff_name )
   },
   methods: {
@@ -63,17 +60,15 @@ export default {
 
 
     },
-    
-  logout() {
-    localStorage.removeItem('token')
-    localStorage.removeItem('role')
-    this.$router.push('/')   
-    alert("You have been logged out successfully!")
+
+    logout() {
+      localStorage.removeItem('token')
+      localStorage.removeItem('role')
+      this.$router.push('/')
+      alert("You have been logged out successfully!")
+    }
   }
 }
-
-
-  }
 
 </script>
 

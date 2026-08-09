@@ -1,5 +1,5 @@
 <template>
-
+ <Navbar />
     <div class="start">
         <h1>Login</h1>
         <form @submit.prevent="login">
@@ -21,14 +21,12 @@
 <script>
 import axios from 'axios'
 import router from '../main';
-
+import Navbar from '../components/Navbar.vue'
 export default {
-    name: 'Login',
+    name: 'Login',components: { Navbar },
     data() {
         return {
-            email: '',
-            password: '',
-            message: ''
+            email: '',password: '',message: ''
         }
     },
     methods: {

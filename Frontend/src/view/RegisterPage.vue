@@ -1,5 +1,6 @@
 <template>
-<!-- <router-link to="/">Home Page</router-link> -->
+    <Navbar />
+    <!-- <router-link to="/">Home Page</router-link> -->
     <h1>Register</h1>
     <div class="start">
         <form @submit.prevent="register">
@@ -15,19 +16,20 @@
                 <label for="password">Password:</label>
                 <input type="password" v-model="password" required />
             </div>
-           <button type="submit">Register</button>
+            <button type="submit">Register</button>
         </form>
         <p>{{ message }}</p>
         <router-link to="/login">Already have an account? Login here</router-link>
     </div>
-    
+
 </template>
 <script>
 import axios from 'axios'
 import router from '../main';
+import Navbar from '../components/Navbar.vue'
 
 export default {
-    name: 'Register',
+    name: 'Register', components: { Navbar },
     data() {
         return {
             name: '',
@@ -40,8 +42,7 @@ export default {
         async register() {
             try {
                 const response = await axios.post('http://127.0.0.1:5000/register', {
-                    name: this.name,
-                    email: this.email,
+                    name: this.name, email: this.email,
                     password: this.password
                 })
                 console.log('Registration successful');

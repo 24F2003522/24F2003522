@@ -1,5 +1,5 @@
 <template>
-
+    <Navbar />
     <h1>Trekking Management Application</h1>
     <div style="text-align: center ;width: 50%; margin: 10px auto;" class="trek-card">
         <h2 Style="color:#acc63b">Welcome to the Trekking Management Application!</h2></br>
@@ -8,12 +8,14 @@
     </div>
     <h2 class="red"><router-link to="/login"> Login </router-link></h2>
     <h2 class="blue"><router-link to="/register">Register</router-link></h2>
-    
+
 </template>
 
 <script>
+import Navbar from '../components/Navbar.vue'
 export default {
     name: 'Home',
+    components: { Navbar },
     data() {
         return {
             message: 'Welcome to the Trekking Management Application!'
