@@ -45,8 +45,8 @@ def make_celery(flask_app):
             "daily-trek-reminder": {"task": "send_trek_reminders","schedule": crontab(hour=7, minute=0)
                 # "schedule": timedelta(hours=1, minutes=1)
             },"monthly-admin-report": {"task": "send_monthly_admin_report",
-            # "schedule": crontab(hour=8, minute=0, day_of_month=1)
-                "schedule": timedelta(hours=0, minutes=1, seconds=10)
+            "schedule": crontab(hour=8, minute=0, day_of_month=1)
+                # "schedule": timedelta(hours=0, minutes=1, seconds=10)
         },
         },
     )
